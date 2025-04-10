@@ -1,4 +1,5 @@
 python-telegram-bot[job-queue,webhooks]>=20.0
+python-telegram-bot>=20.0
 openai
 python-dotenv
 pydub
@@ -6,3 +7,4 @@ gTTS
 matplotlib
 numpy
 requests
+
