@@ -239,42 +239,44 @@ async def comando_ativar(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     codigo = context.args[0]
+    sucesso = False  # Flag de controle
 
     try:
         # Verificar se o código já foi usado por outra pessoa
         if codigo in codigos_utilizados and codigos_utilizados[codigo] != user_id:
             await update.message.reply_text("⚠️ Este código já está sendo usado por outro usuário.")
             return
-            
+
+        # Ler os dados da planilha
         resposta = requests.get(URL_PLANILHA)
         resposta.raise_for_status()
         dados_csv = resposta.content.decode('utf-8')
         leitor_csv = csv.reader(StringIO(dados_csv))
         lista_linhas = list(leitor_csv)
 
-        codigos_validos = [linha[5] for linha in lista_linhas[1:] if len(linha) >= 6]  # coluna F = índice 5
+        # Extrair os códigos válidos (coluna F = índice 5)
+        codigos_validos = [linha[5] for linha in lista_linhas[1:] if len(linha) >= 6]
 
         if codigo in codigos_validos:
             # Definir datas de ativação e expiração
             data_ativacao = datetime.now()
             data_expiracao = data_ativacao + timedelta(days=30)
-            
+
             # Registrar a assinatura
             assinaturas_ativas[user_id] = {
                 "ativacao": data_ativacao,
                 "expiracao": data_expiracao,
                 "codigo": codigo
             }
-            
-            # Registrar que este código está sendo usado por este usuário
+
+            # Marcar código como usado por esse usuário
             codigos_utilizados[codigo] = user_id
-            
-            # Salvar alterações
+
+            # Salvar no JSON
             salvar_dados()
-            
-            # Mensagem formatada com data de expiração
+
+            # Enviar mensagem de boas-vindas premium
             data_expiracao_formatada = data_expiracao.strftime("%d/%m/%Y")
-            
             await update.message.reply_text(
                 "✨ *Acesso Premium Ativado!* ✨\n\n"
                 "Uhuuul! Agora você faz parte do *clube dos fluentes* 🧸💬\n"
@@ -282,17 +284,49 @@ async def comando_ativar(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"Sua assinatura é válida até: *{data_expiracao_formatada}*\n\n"
                 "Tô MUITO feliz de ter você aqui. *Bora evoluir juntos?* 💛\n\n"
                 "📌 *Comandos úteis:*\n"
-                "/ativar [código]` – Ativa a assinatura com o código recebido\n"
-                "/status – Mostra o status atual da sua assinatura\n"
-                "/premium – Exibe informações sobre os benefícios premium",
+                "`/ativar [código]` – Ativa a assinatura com o código recebido\n"
+                "`/status` – Mostra o status atual da sua assinatura\n"
+                "`/premium` – Exibe informações sobre os benefícios premium",
                 parse_mode='Markdown'
             )
-            
+
+            sucesso = True  # tudo certo, não mostra mensagem de erro depois
+
         else:
             await update.message.reply_text("⚠️ Código inválido. Verifique se digitou corretamente.")
+
     except Exception as e:
         print("Erro ao acessar a planilha:", e)
-        await update.message.reply_text("❌ Ocorreu um erro ao verificar o código. Tente novamente mais tarde.")
+        if not sucesso:
+            await update.message.reply_text("❌ Ocorreu um erro ao verificar o código. Tente novamente mais tarde.")
+
+# Comando secreto para resetar a assinatura da Raquel (dev)
+async def resetarquel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+
+    # Substitua pelo seu ID real se quiser travar só pra você
+    if user_id != 123456789:  # << substitua esse número pelo seu ID do Telegram
+        await update.message.reply_text("❌ Você não tem permissão para usar esse comando.")
+        return
+
+    # Remover assinatura ativa
+    assinaturas_ativas.pop(user_id, None)
+
+    # Remover código utilizado por você
+    for codigo, uid in list(codigos_utilizados.items()):
+        if uid == user_id:
+            del codigos_utilizados[codigo]
+
+    # Salvar as mudanças
+    salvar_dados()
+
+    await update.message.reply_text("🔄 Assinatura resetada com sucesso, Raquel! Pode testar tudo de novo 💛")
+
+async def meu_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    await update.message.reply_text(f"Seu ID de usuário é: {user_id}")
+
+application.add_handler(CommandHandler("meuid", meu_id))
 
 # Verificar acesso premium
 def verificar_acesso(user_id):
@@ -1705,6 +1739,8 @@ def main():
     application.add_handler(CommandHandler("reset", resetar))
     application.add_handler(CommandHandler("ativar", comando_ativar))
     application.add_handler(CommandHandler("status", comando_status))
+    application.add_handler(CommandHandler("resetarquel", resetarquel))
+    application.add_handler(CommandHandler("meuid", meuid))
     
     # Adicionar handlers de mensagem
     application.add_handler(MessageHandler(filters.VOICE, tratar_audio))
