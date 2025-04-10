@@ -509,7 +509,7 @@ async def analisar_pronuncia(transcricao, audio_path, nivel):
         Seu objetivo é detectar **apenas erros reais de pronúncia que prejudicam a compreensão**, e **não corrigir sotaques típicos** (como o brasileiro ou britânico, por exemplo). Corrija primeiro a frase e somente se a palavra estiver realmente difícil de entender.
 
         **REGRAS:**
-        - Primeiro dê a frase corrigida, levando em consideração a pronuncia, não pontuações.
+        - Primeiro dê a frase corrigida, levando em consideração a pronuncia, não pontuações, explique o erro em português, não dê outras frases, corrija somente a que precisa.
         - Corrija no máximo 3 palavras, apenas se necessário.
         - Se houver apenas 1 ou 2 palavras com problema claro, corrija só essas.
         - Ignore pequenas variações aceitáveis por sotaque.
@@ -1152,7 +1152,7 @@ async def tratar_texto(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if correcoes == "Perfect ✨":
             resposta = "✅ Great job! Sua mensagem está perfeita!🧸🎉\n"
         else:
-            resposta = "📝 Aqui estão algumas correções:\n" + correcoes + "\n\n"
+            resposta = "📝 Aqui estão algumas correções:\n" + correcoes + "\n"
             if explicacoes:
                 resposta += "\n".join(explicacoes[:2]) + "\n\n"
         
@@ -1315,9 +1315,9 @@ async def tratar_audio(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if correcoes == "Perfect ✨":
             resposta += "✅ Perfeito! Muito bem!🧸🎉\n"
         else:
-            resposta += "📝 Aqui estão algumas correções:\n" + correcoes + "\n\n"
+            resposta += "📝 Aqui estão algumas correções:\n" + correcoes + "\n"
             if explicacoes:
-                resposta += "\n".join(explicacoes[:2]) + "\n\n"
+                resposta += "\n".join(explicacoes[:2]) + "\n"
         
         # Adicionar feedback de pronúncia se não for perfeito
         if correcoes != "Perfect ✨":
