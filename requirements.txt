@@ -1,0 +1,8 @@
+python-telegram-bot>=20.0
+openai
+python-dotenv
+pydub
+gTTS
+matplotlib
+numpy
+requests
