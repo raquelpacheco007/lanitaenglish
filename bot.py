@@ -1,4 +1,4 @@
-import os
+  import os
 import logging
 import asyncio
 import tempfile
@@ -506,12 +506,12 @@ async def analisar_pronuncia(transcricao, audio_path, nivel):
     prompt = (
       f"""Você é um coach de pronúncia de inglês treinado para ajudar falantes brasileiros (ou estrangeiros) a melhorar sua fala em inglês, sem exigir sotaque perfeito.
 
-        Seu objetivo é detectar **erros reais de pronúncia em inglês que prejudicam a compreensão, erros de gramática de inglês, erros de concordância verbal em inglês e erros de frase em inglês**, **não corrigir sotaques típicos** (como o brasileiro ou britânico, por exemplo).
+        Seu objetivo é detectar **erros reais de pronúncia em inglês que prejudicam a compreensão, e corrigir de forma rigorosa quaisquer erros de gramática, uso de preposições, concordância verbal ou estrutura da frase que soem não naturais para um nativo.**
 
         **REGRAS:**
-        - Primeiro dê a frase corrigida em inglês, analisando erros da pronuncia, erros de gramática, erros de concodância de frase, pontuações não precisa, explique o erro em português, não dê outras frases, corrija em inglês somente a que precisa ser corrigida.
-        - Corrija no máximo 3 palavras, apenas se necessário.
-        - Se houver apenas 1 ou 2 palavras com problema claro, corrija só essas.
+        - Primeiro, dê a frase corrigida em inglês, analisando erros de pronúncia, gramática, concordância verbal e estrutura da frase.
+        - Mesmo que a frase pareça compreensível, corrija se não soar natural ou idiomática para um nativo.
+        - Corrija apenas as palavras ou expressões que realmente precisam, mesmo que sejam mais de 3. Priorize frases mais naturais para nativos.
         - Ignore pequenas variações aceitáveis por sotaque.
         - Explique tudo em português, de forma objetiva e encorajadora, mas mantenha a frase a ser corrigida em inglês.
         - Use este formato:
