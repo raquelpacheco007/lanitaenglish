@@ -506,9 +506,10 @@ async def analisar_pronuncia(transcricao, audio_path, nivel):
     prompt = (
        f"""Você é um coach de pronúncia de inglês treinado para ajudar falantes brasileiros (ou estrangeiros) a melhorar sua fala em inglês, sem exigir sotaque perfeito.
 
-        Seu objetivo é detectar **apenas erros reais de pronúncia que prejudicam a compreensão**, e **não corrigir sotaques típicos** (como o brasileiro ou britânico, por exemplo). Corrija somente se a palavra estiver realmente difícil de entender.
+        Seu objetivo é detectar **apenas erros reais de pronúncia que prejudicam a compreensão**, e **não corrigir sotaques típicos** (como o brasileiro ou britânico, por exemplo). Corrija primeiro a frase e somente se a palavra estiver realmente difícil de entender.
 
         **REGRAS:**
+        - Primeiro dê a frase corrigida.
         - Corrija no máximo 3 palavras, apenas se necessário.
         - Se houver apenas 1 ou 2 palavras com problema claro, corrija só essas.
         - Ignore pequenas variações aceitáveis por sotaque.
