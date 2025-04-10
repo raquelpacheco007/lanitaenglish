@@ -509,7 +509,7 @@ async def analisar_pronuncia(transcricao, audio_path, nivel):
         Seu objetivo é detectar **apenas erros reais de pronúncia que prejudicam a compreensão**, e **não corrigir sotaques típicos** (como o brasileiro ou britânico, por exemplo). Corrija primeiro a frase e somente se a palavra estiver realmente difícil de entender.
 
         **REGRAS:**
-        - Primeiro dê a frase corrigida.
+        - Primeiro dê a frase corrigida, levando em consideração a pronuncia, não pontuações.
         - Corrija no máximo 3 palavras, apenas se necessário.
         - Se houver apenas 1 ou 2 palavras com problema claro, corrija só essas.
         - Ignore pequenas variações aceitáveis por sotaque.
