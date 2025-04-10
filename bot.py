@@ -322,12 +322,6 @@ async def resetarquel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text("🔄 Assinatura resetada com sucesso, Raquel! Pode testar tudo de novo 💛")
 
-async def meu_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    await update.message.reply_text(f"Seu ID de usuário é: {user_id}")
-
-application.add_handler(CommandHandler("meuid", meu_id))
-
 # Verificar acesso premium
 def verificar_acesso(user_id):
     agora = datetime.now()
@@ -1685,6 +1679,10 @@ async def comando_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "Após a compra, use o comando <b>/ativar [código]</b> com o código recebido.",
             parse_mode='HTML'
         )
+
+async def meuid(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    await update.message.reply_text(f"Seu ID de usuário é: {user_id}")
 
 # Função principal (versão para webhook no Render)
 def main():
