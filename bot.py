@@ -305,7 +305,7 @@ async def resetarquel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
 
     # Substitua pelo seu ID real se quiser travar só pra você
-    if user_id != 123456789:  # << substitua esse número pelo seu ID do Telegram
+    if user_id != 7577122726:  # << substitua esse número pelo seu ID do Telegram
         await update.message.reply_text("❌ Você não tem permissão para usar esse comando.")
         return
 
