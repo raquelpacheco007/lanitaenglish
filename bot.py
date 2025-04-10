@@ -516,12 +516,11 @@ async def analisar_pronuncia(transcricao, audio_path, nivel):
         - Explique tudo em português, de forma objetiva e encorajadora.
         - Use este formato:
 
-        1. Palavra original que vai ser corrigida, coloque: Palavra {{palavra original}}
+        1. Palavra original que vai ser corrigida,sem { } coloque: Palavra: {{palavra original}}
         2. Forma como o aluno falou e você ouviu, coloque: Como foi pronunciada:  {{forma incorreta percebida}}
         3. Pronúncia correta, coloque: Pronuncia Correta: {{guia com sílabas e símbolos fonéticos, ex: /əˈbɪl.ə.ti/}}
         4. Dica prática para melhorar, coloque: Dica prática para melhorar:
-        IMPORTANTE: Dê suas explicações em português para facilitar o entendimento do aluno, seja objetivo e certeiro.
-        Transcrição: {transcricao}"""
+        IMPORTANTE: Dê suas explicações em português para facilitar o entendimento do aluno, seja objetivo e certeiro."""
     )
     
     resposta = openai_client.chat.completions.create(
