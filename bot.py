@@ -483,7 +483,7 @@ async def corrigir_texto_por_partes(texto, nivel):
                 continue
             else:
                 houve_erros = True
-                respostas.append(f" {correcao}")
+                respostas.append(f" {correcao}\n")
                 if explicacao:
                     explicacoes.append(f"📝 {explicacao}")
         except Exception as e:
@@ -1152,7 +1152,7 @@ async def tratar_texto(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if correcoes == "Perfect ✨":
             resposta = "✅ Great job! Sua mensagem está perfeita!🧸🎉\n"
         else:
-            resposta = "📝 Aqui estão algumas correções:\n\n" + correcoes + "\n"
+            resposta = "📝 Aqui estão algumas correções:\n" + correcoes + "\n\n"
             if explicacoes:
                 resposta += "\n".join(explicacoes[:2]) + "\n\n"
         
@@ -1315,7 +1315,7 @@ async def tratar_audio(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if correcoes == "Perfect ✨":
             resposta += "✅ Perfeito! Muito bem!🧸🎉\n"
         else:
-            resposta += "📝 Aqui estão algumas correções:\n\n" + correcoes + "\n"
+            resposta += "📝 Aqui estão algumas correções:\n" + correcoes + "\n\n"
             if explicacoes:
                 resposta += "\n".join(explicacoes[:2]) + "\n\n"
         
