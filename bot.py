@@ -522,7 +522,7 @@ async def analisar_pronuncia(transcricao, audio_path, nivel):
         4. Dica prática para melhorar, coloque: Dica prática para melhorar
     
         IMPORTANTE: Dê suas explicações em português para facilitar o entendimento do aluno, mas não traduza as frases da transcrição para português, mantenha em inglês"""
-    )
+     )
     
     resposta = openai_client.chat.completions.create(
         model="gpt-3.5-turbo",
