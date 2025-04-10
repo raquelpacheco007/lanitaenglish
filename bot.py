@@ -504,15 +504,23 @@ async def corrigir_texto_por_partes(texto, nivel):
 # Função para detectar problemas de pronúncia
 async def analisar_pronuncia(transcricao, audio_path, nivel):
     prompt = (
-       f"""Você é um coach de pronúncia de inglês ajudando um aluno de nível {nivel}. 
-       Analise esta transcrição e identifique possíveis problemas de pronúncia, com foco nos erros mais relevantes que dificultam a compreensão. 
-       Para cada palavra pronunciada de forma incorreta, siga este formato:
-       1. Mostre qual palavra foi pronunciada de forma incorreta.
-       2. Diga como ela foi dita (ex: 'important' foi dito como 'imbortant').
-       3. Explique brevemente como deveria ser pronunciada corretamente, com ênfase nas sílabas e sons certos (ex: /ɪmˈpɔːrtənt/).
-       4. Se possível, mencione uma dica prática para melhorar essa pronúncia.
-       IMPORTANTE: Dê suas explicações em português para facilitar o entendimento do aluno, seja objetivo e certeiro.
-       Transcrição: {transcricao}"""
+       f"""Você é um coach de pronúncia de inglês treinado para ajudar falantes brasileiros (ou estrangeiros) a melhorar sua fala em inglês, sem exigir sotaque perfeito.
+
+        Seu objetivo é detectar **apenas erros reais de pronúncia que prejudicam a compreensão**, e **não corrigir sotaques típicos** (como o brasileiro ou britânico, por exemplo). Corrija somente se a palavra estiver realmente difícil de entender.
+
+        **REGRAS:**
+        - Corrija no máximo 3 palavras, apenas se necessário.
+        - Se houver apenas 1 ou 2 palavras com problema claro, corrija só essas.
+        - Ignore pequenas variações aceitáveis por sotaque.
+        - Explique tudo em português, de forma objetiva e encorajadora.
+        - Use este formato:
+
+        1. Palavra incorreta: {palavra original}
+        2. Como foi pronunciada: {forma incorreta percebida}
+        3. Pronúncia correta: {guia com sílabas e símbolos fonéticos, ex: /əˈbɪl.ə.ti/}
+        4. Dica prática para melhorar
+        IMPORTANTE: Dê suas explicações em português para facilitar o entendimento do aluno, seja objetivo e certeiro.
+        Transcrição: {transcricao}"""
     )
     
     resposta = openai_client.chat.completions.create(
