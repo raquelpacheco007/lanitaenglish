@@ -504,23 +504,24 @@ async def corrigir_texto_por_partes(texto, nivel):
 # Função para detectar problemas de pronúncia
 async def analisar_pronuncia(transcricao, audio_path, nivel):
     prompt = (
-       f"""Você é um coach de pronúncia de inglês treinado para ajudar falantes brasileiros (ou estrangeiros) a melhorar sua fala em inglês, sem exigir sotaque perfeito.
+      f"""Você é um coach de pronúncia de inglês treinado para ajudar falantes brasileiros (ou estrangeiros) a melhorar sua fala em inglês, sem exigir sotaque perfeito.
 
-        Seu objetivo é detectar **erros reais de pronúncia que prejudicam a compreensão, erros de gramática e concordância verbal e de frase**, e **não corrigir sotaques típicos** (como o brasileiro ou britânico, por exemplo). Corrija primeiro a frase.
+      Seu objetivo é detectar **erros reais de pronúncia que prejudicam a compreensão, erros de gramática e concordância verbal e de frase**, e **não corrigir sotaques típicos** (como o brasileiro ou britânico, por exemplo). Corrija primeiro a frase.
 
-        **REGRAS:**
-        - Primeiro dê a frase corrigida em inglês, levando em consideração erros da pronuncia, pontuações não precisa, explique o erro em português, não dê outras frases, corrija somente a que precisa ser corrigida.
-        - Corrija no máximo 3 palavras, apenas se necessário.
-        - Se houver apenas 1 ou 2 palavras com problema claro, corrija só essas.
-        - Ignore pequenas variações aceitáveis por sotaque.
-        - Explique tudo em português, de forma objetiva e encorajadora.
-        - Use este formato:
+      **REGRAS:**
+      - Primeiro dê a frase corrigida em inglês, levando em consideração erros da pronúncia. Pontuações não precisam ser corrigidas. Explique o erro em português. Não dê outras frases, corrija somente a que precisa ser corrigida.
+      - Corrija no máximo 3 palavras, apenas se necessário.
+      - Se houver apenas 1 ou 2 palavras com problema claro, corrija só essas.
+      - Ignore pequenas variações aceitáveis por sotaque.
+      - Explique tudo em português, de forma objetiva e encorajadora.
+      - Use este formato:
 
-        1. Palavra original que vai ser corrigida,sem { } coloque: Palavra: {{palavra original}}
-        2. Forma como o aluno falou e você ouviu, coloque: Como foi pronunciada:  {{forma incorreta percebida}}
-        3. Pronúncia correta, coloque: Pronuncia Correta: {{guia com sílabas e símbolos fonéticos, ex: /əˈbɪl.ə.ti/}}
-        4. Dica prática para melhorar, coloque: Dica prática para melhorar:
-        IMPORTANTE: Dê suas explicações em português para facilitar o entendimento do aluno, seja objetivo e certeiro."""
+      1. Palavra original que vai ser corrigida, sem {{ }} coloque: Palavra: {{palavra original}}
+      2. Forma como o aluno falou e você ouviu, coloque: Como foi pronunciada: {{forma incorreta percebida}}
+      3. Pronúncia correta, coloque: Pronúncia Correta: {{guia com sílabas e símbolos fonéticos, ex: /əˈbɪl.ə.ti/}}
+      4. Dica prática para melhorar, coloque: Dica prática para melhorar:
+    
+      IMPORTANTE: Dê suas explicações em português para facilitar o entendimento do aluno, seja objetivo e certeiro."""
     )
     
     resposta = openai_client.chat.completions.create(
