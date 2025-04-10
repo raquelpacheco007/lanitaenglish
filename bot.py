@@ -483,7 +483,7 @@ async def corrigir_texto_por_partes(texto, nivel):
                 continue
             else:
                 houve_erros = True
-                respostas.append(f"❌ {frase}\n {correcao}")
+                respostas.append(f"✅ {correcao}")
                 if explicacao:
                     explicacoes.append(f"📝 {explicacao}")
         except Exception as e:
