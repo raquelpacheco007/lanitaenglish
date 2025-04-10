@@ -516,8 +516,8 @@ async def analisar_pronuncia(transcricao, audio_path, nivel):
         - Explique tudo em português, de forma objetiva e encorajadora.
         - Use este formato:
 
-        1. Palavra incorreta: {{palavra original}}
-        2. Forma como o aluno pronunciou errado: {{forma incorreta percebida}}
+        1. Palavra incorreta dita em inglês: {{palavra original}}
+        2. Forma como o aluno falou e você ouviu: {{forma incorreta percebida}}
         3. Pronúncia correta: {{guia com sílabas e símbolos fonéticos, ex: /əˈbɪl.ə.ti/}}
         4. Dica prática para melhorar
         IMPORTANTE: Dê suas explicações em português para facilitar o entendimento do aluno, seja objetivo e certeiro.
@@ -1152,7 +1152,7 @@ async def tratar_texto(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if correcoes == "Perfect ✨":
             resposta = "✅ Great job! Sua mensagem está perfeita!🧸🎉\n"
         else:
-            resposta = "📝 Aqui estão algumas correções:\n" + correcoes + "\n\n"
+            resposta = "📝 Aqui estão algumas correções:\n" + correcoes + "\n"
             if explicacoes:
                 resposta += "\n".join(explicacoes[:2]) + "\n\n"
         
@@ -1315,7 +1315,7 @@ async def tratar_audio(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if correcoes == "Perfect ✨":
             resposta += "✅ Perfeito! Muito bem!🧸🎉\n"
         else:
-            resposta += "📝 Aqui estão algumas correções:\n" + correcoes + "\n\n"
+            resposta += "📝 Aqui estão algumas correções:\n" + correcoes + "\n"
             if explicacoes:
                 resposta += "\n".join(explicacoes[:2]) + "\n"
         
