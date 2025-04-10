@@ -520,8 +520,9 @@ async def analisar_pronuncia(transcricao, audio_path, nivel):
         2. Forma como o aluno falou e você ouviu, coloque: Como foi pronunciada:  {{forma incorreta percebida}}
         3. Pronúncia correta, coloque: Pronuncia Correta: {{guia com sílabas e símbolos fonéticos, ex: /əˈbɪl.ə.ti/}}
         4. Dica prática para melhorar, coloque: Dica prática para melhorar
-        IMPORTANTE: Dê suas explicações em português para facilitar o entendimento do aluno, mas não traduza as frases da transcrição para português, mantenha em inglês"""
-     )
+        IMPORTANTE: Dê suas explicações em português para facilitar o entendimento do aluno, mas não traduza as frases da transcrição para português, mantenha em inglês.
+        Transcrição: {transcricao}"""
+    )
     
     resposta = openai_client.chat.completions.create(
         model="gpt-3.5-turbo",
