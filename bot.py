@@ -485,7 +485,7 @@ async def corrigir_texto_por_partes(texto, nivel):
                 houve_erros = True
                 respostas.append(f" {correcao}\n")
                 if explicacao:
-                    explicacoes.append(f"📝 {explicacao}")
+                    explicacoes.append(f"📝 {explicacao}\n")
         except Exception as e:
             logging.error(f"Erro ao processar frase: {frase}. Erro: {e}")
             continue  # Pular esta frase e continuar com as outras
@@ -517,7 +517,7 @@ async def analisar_pronuncia(transcricao, audio_path, nivel):
         - Use este formato:
 
         1. Palavra incorreta: {{palavra original}}
-        2. Como foi pronunciada: {{forma incorreta percebida}}
+        2. Como foi o aluno pronunciou o que entendeu: {{forma incorreta percebida}}
         3. Pronúncia correta: {{guia com sílabas e símbolos fonéticos, ex: /əˈbɪl.ə.ti/}}
         4. Dica prática para melhorar
         IMPORTANTE: Dê suas explicações em português para facilitar o entendimento do aluno, seja objetivo e certeiro.
@@ -1152,7 +1152,7 @@ async def tratar_texto(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if correcoes == "Perfect ✨":
             resposta = "✅ Great job! Sua mensagem está perfeita!🧸🎉\n"
         else:
-            resposta = "📝 Aqui estão algumas correções:\n" + correcoes + "\n"
+            resposta = "📝 Aqui estão algumas correções:\n" + correcoes + "\n\n"
             if explicacoes:
                 resposta += "\n".join(explicacoes[:2]) + "\n\n"
         
@@ -1315,7 +1315,7 @@ async def tratar_audio(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if correcoes == "Perfect ✨":
             resposta += "✅ Perfeito! Muito bem!🧸🎉\n"
         else:
-            resposta += "📝 Aqui estão algumas correções:\n" + correcoes + "\n"
+            resposta += "📝 Aqui estão algumas correções:\n" + correcoes + "\n\n"
             if explicacoes:
                 resposta += "\n".join(explicacoes[:2]) + "\n"
         
