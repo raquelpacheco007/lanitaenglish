@@ -509,18 +509,17 @@ async def analisar_pronuncia(transcricao, audio_path, nivel):
         Seu objetivo é detectar **erros reais de pronúncia em inglês que prejudicam a compreensão, erros de gramática de inglês, erros de concordância verbal em inglês e erros de frase em inglês**, **não corrigir sotaques típicos** (como o brasileiro ou britânico, por exemplo).
 
         **REGRAS:**
-        - Primeiro dê a frase corrigida em inglês, analisando erros da pronuncia, erros de gramática, erros de concodancia de frase, pontuações não precisa, explique o erro em português, não dê outras frases, corrija em inglês somente a que precisa ser corrigida.
+        - Primeiro dê a frase corrigida em inglês, analisando erros da pronuncia, erros de gramática, erros de concodância de frase, pontuações não precisa, explique o erro em português, não dê outras frases, corrija em inglês somente a que precisa ser corrigida.
         - Corrija no máximo 3 palavras, apenas se necessário.
         - Se houver apenas 1 ou 2 palavras com problema claro, corrija só essas.
         - Ignore pequenas variações aceitáveis por sotaque.
         - Explique tudo em português, de forma objetiva e encorajadora, mas mantenha a frase a ser corrigida em inglês.
         - Use este formato:
 
-        1. Palavra original em inglês que vai ser corrigida,sem { } coloque: Palavra: {{palavra original}}
+        1. Palavra original em inglês que vai ser corrigida, coloque: Palavra: {{palavra original}}
         2. Forma como o aluno falou e você ouviu, coloque: Como foi pronunciada:  {{forma incorreta percebida}}
         3. Pronúncia correta, coloque: Pronuncia Correta: {{guia com sílabas e símbolos fonéticos, ex: /əˈbɪl.ə.ti/}}
         4. Dica prática para melhorar, coloque: Dica prática para melhorar
-    
         IMPORTANTE: Dê suas explicações em português para facilitar o entendimento do aluno, mas não traduza as frases da transcrição para português, mantenha em inglês"""
      )
     
