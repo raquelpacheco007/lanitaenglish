@@ -1199,7 +1199,7 @@ async def tratar_texto(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if correcoes == "Perfect ✨":
             resposta = "✅ Great job! Sua mensagem está perfeita!🧸🎉\n"
         else:
-            resposta = "📝 Aqui estão algumas correções:\n" + correcoes + 
+            resposta = "📝 Aqui estão algumas correções:\n" + correcoes 
             if explicacoes:
                 resposta += "\n".join(explicacoes[:2]) + "\n\n"
         
@@ -1362,7 +1362,7 @@ async def tratar_audio(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if correcoes == "Perfect ✨":
             resposta += "✅ Perfeito! Muito bem!🧸🎉\n"
         else:
-            resposta += "📝 Aqui estão algumas correções:\n" + correcoes + 
+            resposta += "📝 Aqui estão algumas correções:\n" + correcoes 
             if explicacoes:
                 resposta += "\n".join(explicacoes[:2]) + "\n"
         
