@@ -7,4 +7,5 @@ gTTS
 matplotlib
 numpy
 requests
-
+sqlalchemy
+psycopg2-binary
