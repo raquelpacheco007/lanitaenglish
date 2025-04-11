@@ -1,4 +1,21 @@
 import os
+
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from models import Base, Usuario  # Certifique-se de que o nome do modelo está correto
+
+db_url = 'postgresql://lanabotdb_user:WQY5IAP6vXomX5P0jEJbCF80LZYq1eSN@dpg-cvsihshr0fns73c9mudg-a.oregon-postgres.render.com/lanabotdb'
+engine = create_engine(db_url)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
 import logging
 import asyncio
 import tempfile
@@ -515,7 +532,7 @@ Você é uma professora de inglês experiente, especializada em ensinar alunos b
 
 1. Palavra: {{palavra dita pelo aluno}} (Em inglês)
 2. Como foi pronunciada: {{forma percebida}}
-3. Pronúncia correta: {{ex: /ˈæb.sə.luːt.li/}} (IPA)
+3. Pronúncia correta: {{ex: /ˈæb.sə.luːt.li/}}
 4. Dica prática: {{dica para melhorar articulação ou entonação}} (dica em português)
 
 ⚠️ Se o aluno tiver sotaque brasileiro ou britânico, mas a fala for compreensível, **não corrija**.
@@ -523,7 +540,7 @@ Você é uma professora de inglês experiente, especializada em ensinar alunos b
 
 3. Escolha apenas **uma** forma corrigida da frase do aluno e use essa mesma versão ao longo de toda a explicação, inclusive na seção final de correção. Priorize estruturas naturais, comuns no inglês falado, considerando o nível do aluno.
 Finalize com:
-✅ Frase Corrigida: {{frase correta, natural e completa}} Apresente a frase corrigida em inglês no final em negrito (bold).
+✅ Frase Corrigida: {{frase correta, natural e completa}} Apresente a frase corrigida completa conforme sua coreção.
 
 4. Nunca traduza automaticamente frases em português. Se o áudio estiver em português, diga:
 "Por favor, envie um áudio em inglês para que eu possa analisar sua fala."
