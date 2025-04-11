@@ -4,7 +4,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from models import Base, Usuario  # Certifique-se de que o nome do modelo está correto
 
-db_url = 'postgresql://lanabotdb_user:WQY5IAP6vXomX5P0jEJbCF80LZYq1eSN@dpg-cvsihshr0fns73c9mudg-a.oregon-postgres.render.com/lanabotdb'
+db_url = os.getenv("DATABASE_URL")
 engine = create_engine(db_url)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
