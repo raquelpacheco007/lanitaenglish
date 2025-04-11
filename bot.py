@@ -1312,7 +1312,7 @@ async def tratar_audio(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     try:
         # Transcrever áudio
-        transcricao = await transcrever_audio(mp3_path)
+        transcricao = transcrever_audio(mp3_path)
         
         # Obter dados do usuário
         perfil = perfil_usuario.get(user_id, {"nivel": "intermediate", "tema_atual": "daily_life"})
@@ -1323,7 +1323,7 @@ async def tratar_audio(update: Update, context: ContextTypes.DEFAULT_TYPE):
         correcoes, frases_originais, explicacoes = await corrigir_texto_por_partes(transcricao, nivel)
         
         # Analisar pronúncia
-        analise_pronuncia = await analisar_pronuncia(transcricao, mp3_path, nivel)
+        analise_pronuncia = analisar_pronuncia(transcricao, mp3_path, nivel)
         
         # Adicionar pontos
         pontos = 5  # Pontos base por interação
