@@ -555,8 +555,9 @@ async def analisar_pronuncia(transcricao, audio_path, nivel):
         user_prompt = gerar_prompt(transcricao, nivel)
 
         # Chamada à API da OpenAI
+        modelo = "gpt-3.5-turbo"  
         response = openai_client.chat.completions.create(
-            model="gpt-4",
+            model=modelo,
             messages=[
                 {"role": "system", "content": system_message},
                 {"role": "user", "content": user_prompt}
@@ -564,6 +565,7 @@ async def analisar_pronuncia(transcricao, audio_path, nivel):
             temperature=0.3,
             max_tokens=1000
         )
+
 
         # Conteúdo da resposta
         return response.choices[0].message.content
