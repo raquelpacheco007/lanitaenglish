@@ -534,15 +534,15 @@ Correction: [insira aqui a frase completa e corrigida, de forma natural para um 
 ---
 
 🗣️ Dicas de pronúncia:
-Liste de 1 a 4 palavras ou expressões mal pronunciadas (mesmo com sotaque brasileiro), utilizando o formato abaixo:
+Liste de 1 a 4 palavras erradas separadas nesse mesmo formato de 1 á 4, ou expressões mal pronunciadas (mesmo com sotaque brasileiro), utilizando o formato abaixo:
 
 1. Palavra: {{palavra original dita pelo aluno em inglês}}
 2. Como foi pronunciada: {{forma pronunciada percebida}}
 3. Pronúncia Correta: {{guia fonético com sílabas e símbolos, ex: /ˈæb.sə.luːt.li/}}
 4. Dica prática para melhorar: {{dica objetiva em português para melhorar a articulação ou entonação}}
 ---
-✅ Frase final corrigida:
-"{{frase completa, natural e corrigida, em inglês}}"
+✅ Após as dicas de pronúncia das frases, pular uma linha e colocar a frase completa corrigida com ✅ no começo.
+✅ "{{frase completa, natural e corrigida, em inglês}}"
 ---
 🔁 **NUNCA traduza o que o aluno falou em português para inglês automaticamente. Se o áudio for em português, diga que precisa de uma fala em inglês para correção.**
 """
