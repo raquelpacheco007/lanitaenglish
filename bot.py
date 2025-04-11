@@ -545,14 +545,14 @@ Finalize mostrando a frase corrigida com clareza, iniciando com: ✅ Frase corri
 
 
 # Função para detectar problemas de pronúncia
-async def analisar_pronuncia(transcricao, audio_path, nivel):
+def analisar_pronuncia(transcricao, audio_path, nivel):
     try:
         # Gera o prompt com base na transcrição
         user_prompt = gerar_prompt(transcricao, nivel)
 
         # Chamada à API da OpenAI
-        response = await openai_client.chat.completions.create(
-            model="gpt-4",  # ou "gpt-3.5-turbo"
+        response = openai_client.chat.completions.create(
+            model="gpt-4",
             messages=[
                 {"role": "system", "content": system_message},
                 {"role": "user", "content": user_prompt}
@@ -561,8 +561,7 @@ async def analisar_pronuncia(transcricao, audio_path, nivel):
             max_tokens=1000
         )
 
-
-        # Retorna o conteúdo da resposta
+        # Conteúdo da resposta
         return response.choices[0].message.content
 
     except Exception as e:
