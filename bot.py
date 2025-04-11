@@ -1323,7 +1323,7 @@ async def tratar_audio(update: Update, context: ContextTypes.DEFAULT_TYPE):
         correcoes, frases_originais, explicacoes = await corrigir_texto_por_partes(transcricao, nivel)
         
         # Analisar pronúncia
-        analise_pronuncia = await gostaanalisar_pronuncia(transcricao, mp3_path, nivel)
+        analise_pronuncia = await analisar_pronuncia(transcricao, mp3_path, nivel)
         
         # Adicionar pontos
         pontos = 5  # Pontos base por interação
