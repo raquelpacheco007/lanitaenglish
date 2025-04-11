@@ -939,12 +939,24 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     
+    # Manter a assinatura premium mesmo após reset (como no comando reset)
+    premium_status = None
+    if user_id in assinaturas_ativas:
+        premium_status = assinaturas_ativas[user_id]
+    
     # Resetar o estado do usuário para iniciar fluxo
     estagio_usuario[user_id] = NOME
     
     # Se já existir um perfil, limpar a configuração de estágio
     if user_id in perfil_usuario:
         del perfil_usuario[user_id]
+    
+    # Restaurar status premium após reset se existia
+    if premium_status:
+        assinaturas_ativas[user_id] = premium_status
+    
+    # Salvar dados modificados
+    salvar_dados()
     
     await update.message.reply_text(
         "🌟 Welcome to Lana English 🧸 🌟\n"
