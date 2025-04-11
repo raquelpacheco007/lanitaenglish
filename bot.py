@@ -530,7 +530,7 @@ Seja clara, encorajadora e objetiva.
 """
 
 # Função que gera o prompt com base na transcrição
-def gerar_prompt(transcricao):
+def gerar_prompt(transcricao, nivel):
     return f"""
 🗣️ Esta foi a frase falada pelo aluno em inglês (nível {nivel}):
 
@@ -552,14 +552,15 @@ async def analisar_pronuncia(transcricao, audio_path, nivel):
 
         # Chamada à API da OpenAI
         response = await openai_client.chat.completions.create(
-            model="gpt-4",  # ou "gpt-3.5-turbo" se quiser economizar
+            model="gpt-4",  # ou "gpt-3.5-turbo"
             messages=[
                 {"role": "system", "content": system_message},
                 {"role": "user", "content": user_prompt}
             ],
             temperature=0.3,
             max_tokens=1000
-            )
+        )
+
 
         # Retorna o conteúdo da resposta
         return response.choices[0].message.content
@@ -947,13 +948,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         del perfil_usuario[user_id]
     
     await update.message.reply_text(
-        "🌟 Welcome to Lana English 🧸 🌟\n\n"
+        "🌟 Welcome to Lana English 🧸 🌟\n"
         "Olá! Estou aqui para te ajudar a praticar inglês de forma leve e divertida, com conversas naturais! 🧸💬🇬🇧\n\n"
         "Antes de começarmos...\n\n"
          "Aqui são alguns Comandos pra você interagir:\n\n"
         "🧸 Comandos Básicos:\n"
         "• /start - Inicia ou reinicia o bot\n"
-        "• /menu - Acessa o menu principal\n"
         "• /reset - Reseta seus dados\n"
         "• /cancel - Cancela o fluxo atual\n"
         "• /help - Mostra esta mensagem de ajuda\n"
