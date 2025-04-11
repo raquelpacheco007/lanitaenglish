@@ -500,39 +500,76 @@ async def corrigir_texto_por_partes(texto, nivel):
         
     return "\n\n".join(respostas), frases, explicacoes
 
+# Mensagem do sistema que define o comportamento da IA
+system_message = """
+Você é um coach de pronúncia e estrutura de inglês para falantes brasileiros. 
+Siga exatamente o formato definido pelo usuário. 
+Não invente frases, não adicione informações extras, e mantenha total consistência. 
+Corrija com rigor erros de gramática, vocabulário, estrutura de frase e pronúncia, mesmo que sutis. 
+Corrija também a estrutura da frase se ela estiver gramaticalmente correta, mas soar estranha para um nativo. 
+Ignore variações aceitáveis de sotaque (como o sotaque britânico), a menos que afetem a compreensão da frase. 
+Nunca traduza a frase original dita em inglês para o português. 
+Se o áudio estiver em português, responda informando que precisa de uma frase em inglês para poder corrigir.
+"""
+
+# Função que gera o prompt com base na transcrição
+def gerar_prompt(transcricao):
+    return f"""
+Você é um coach de pronúncia e estrutura de inglês para falantes brasileiros. Seu objetivo é corrigir a frase falada pelo aluno com foco em:
+- Erros de **gramática**, **uso de palavras**, **concordância verbal**, **estrutura da frase** e **preposições**
+- **Erros de pronúncia reais**, que dificultam a compreensão, mesmo considerando sotaques como britânico ou sotaque de brasileiros que falam inglês
+⚠️ **REGRAS OBRIGATÓRIAS – SIGA SEMPRE O FORMATO ABAIXO**:
+---
+🗣️ Você disse:
+{transcricao}
+
+📝 Aqui estão algumas correções:
+Correction: [insira aqui a frase completa e corrigida, de forma natural para um nativo]
+
+📝 Explicação dos principais erros:
+- Explique os erros encontrados (gramática, vocabulário, estrutura ou preposição) de forma objetiva e clara, em português
+- Corrija sempre que a frase parecer estranha para um nativo, mesmo que "tecnicamente correta"
+- NÃO pule nenhum erro e NÃO diga que "a frase está compreensível" se não for natural
+- NÃO traduza a frase original para o português — mantenha-a sempre em inglês
+---
+
+🗣️ Dicas de pronúncia:
+Liste de 1 a 4 palavras ou expressões mal pronunciadas (mesmo com sotaque brasileiro), utilizando o formato abaixo:
+
+1. Palavra: {{palavra original dita pelo aluno em inglês}}
+2. Como foi pronunciada: {{forma pronunciada percebida}}
+3. Pronúncia Correta: {{guia fonético com sílabas e símbolos, ex: /ˈæb.sə.luːt.li/}}
+4. Dica prática para melhorar: {{dica objetiva em português para melhorar a articulação ou entonação}}
+---
+✅ Frase final corrigida:
+"{{frase completa, natural e corrigida, em inglês}}"
+---
+🔁 **NUNCA traduza o que o aluno falou em português para inglês automaticamente. Se o áudio for em português, diga que precisa de uma fala em inglês para correção.**
+"""
 
 # Função para detectar problemas de pronúncia
 async def analisar_pronuncia(transcricao, audio_path, nivel):
-    prompt = (
-      f"""Você é um coach de pronúncia de inglês treinado para ajudar falantes brasileiros (ou estrangeiros) a melhorar sua fala em inglês, sem exigir sotaque perfeito.
+    try:
+        # Gera o prompt com base na transcrição
+        user_prompt = gerar_prompt(transcricao)
 
-        Seu objetivo é detectar **erros reais de pronúncia em inglês que prejudicam a compreensão, e corrigir de forma rigorosa quaisquer erros de gramática, uso de preposições, concordância verbal ou estrutura da frase que soem não naturais para um nativo.**
+        # Chamada à API da OpenAI
+        response = await openai.ChatCompletion.acreate(
+            model="gpt-4",  # ou "gpt-3.5-turbo" se preferir
+            messages=[
+                {"role": "system", "content": system_message},
+                {"role": "user", "content": user_prompt}
+            ],
+            temperature=0.3,
+            max_tokens=1000
+        )
 
-        **REGRAS:**
-        - Primeiro, dê a frase corrigida em inglês, analisando erros de pronúncia, gramática, concordância verbal e estrutura da frase.
-        - Mesmo que a frase pareça compreensível, corrija se não soar natural ou idiomática para um nativo.
-        - Corrija apenas as palavras ou expressões que realmente precisam, mesmo que sejam mais de 3. Priorize frases mais naturais para nativos.
-        - Ignore pequenas variações aceitáveis por sotaque.
-        - Explique tudo em português, de forma objetiva e encorajadora, mas mantenha a frase a ser corrigida em inglês.
-        - Use este formato:
+        # Retorna o conteúdo da resposta
+        return response.choices[0].message.content
 
-        1. Palavra original em inglês que vai ser corrigida, coloque: Palavra: {{palavra original}}
-        2. Forma como o aluno falou e você ouviu, coloque: Como foi pronunciada:  {{forma incorreta percebida}}
-        3. Pronúncia correta, coloque: Pronuncia Correta: {{guia com sílabas e símbolos fonéticos, ex: /əˈbɪl.ə.ti/}}
-        4. Dica prática para melhorar, coloque: Dica prática para melhorar
-        IMPORTANTE: Dê suas explicações em português para facilitar o entendimento do aluno, mas não traduza as frases da transcrição para português, mantenha em inglês.
-        Frase dita pelo aluno (use como base para análise, **não envie a frase de transcrição de novo, finalize na etapa 4**): "{transcricao}"
+    except Exception as e:
+        return f"❌ Erro ao processar a análise: {str(e)}"       
     
-      """
-    )
-    
-    resposta = openai_client.chat.completions.create(
-        model="gpt-3.5-turbo",
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.7
-    )
-    
-    return resposta.choices[0].message.content.strip()
 
 # Função para recomendar material de estudo baseado nos erros
 async def recomendar_material(user_id):
