@@ -545,7 +545,7 @@ Finalize mostrando a frase corrigida com clareza, iniciando com: ✅ Frase corri
 
 
 # Função para detectar problemas de pronúncia
-def analisar_pronuncia(transcricao, audio_path, nivel):
+async def analisar_pronuncia(transcricao, audio_path, nivel):
     try:
         # Gera o prompt com base na transcrição
         user_prompt = gerar_prompt(transcricao, nivel)
@@ -1323,7 +1323,7 @@ async def tratar_audio(update: Update, context: ContextTypes.DEFAULT_TYPE):
         correcoes, frases_originais, explicacoes = await corrigir_texto_por_partes(transcricao, nivel)
         
         # Analisar pronúncia
-        analise_pronuncia = analisar_pronuncia(transcricao, mp3_path, nivel)
+        analise_pronuncia = await gostaanalisar_pronuncia(transcricao, mp3_path, nivel)
         
         # Adicionar pontos
         pontos = 5  # Pontos base por interação
