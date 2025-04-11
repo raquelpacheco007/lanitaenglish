@@ -1,21 +1,4 @@
 import os
-
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from models import Base, Usuario  # Certifique-se de que o nome do modelo está correto
-
-db_url = os.getenv("DATABASE_URL")
-engine = create_engine(db_url)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
-
 import logging
 import asyncio
 import tempfile
@@ -36,8 +19,40 @@ import io
 from io import StringIO
 from telegram import Update
 from telegram.ext import ContextTypes
+
+# Importar classes do banco de dados
+from sqlalchemy import create_engine, and_, or_, func, desc
+from sqlalchemy.orm import sessionmaker
+from models import (
+    Base, Usuario, PerfilUsuario, HistoricoErros,
+    PontosUsuario, StreakUsuario, UltimaInteracao,
+    CodigosUtilizados, InteracoesUsuario, ConversasUsuario
+)
+
+# Importar funções de banco de dados
+from db_functions import (
+    iniciar_bd, obter_usuario, criar_usuario, atualizar_usuario,
+    obter_perfil, criar_perfil, atualizar_perfil,
+    obter_pontos, adicionar_pontos_db, obter_streak, atualizar_streak_db,
+    adicionar_erro, obter_historico_erros, obter_contador_interacoes, 
+    adicionar_interacao, registrar_pergunta, obter_perguntas_usadas,
+    verificar_codigo_usado, registrar_uso_codigo, verificar_assinatura_premium,
+    ativar_assinatura, listar_assinaturas_expiradas, migrar_dados_json_para_db
+)
+
 from dotenv import load_dotenv
 load_dotenv()
+
+# Configuração do banco de dados
+db_url = os.getenv("DATABASE_URL")
+SessionLocal = iniciar_bd(db_url)
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
 # Chaves de acesso
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
@@ -58,21 +73,9 @@ logging.basicConfig(level=logging.INFO,
 NOME, NIVEL, MENU, TEMA, TRADUCAO = range(5)
 
 # Dicionários para controle
-perfil_usuario = {}
-conversas_usuario = {}
-respostas_usuario = {}
-tempo_usuarios = {}
-estagio_usuario = {}
-historico_erros = {}
-interacoes_usuario = {}
-pontos_usuario = {}
-streak_usuario = {}
-ultima_interacao = {}
+estagio_usuario = {}  # Mantido em memória para gerenciar o fluxo de conversas
+tempo_usuarios = {}  # Para controle de tempo
 ultimas_mensagens = {}  # Para armazenar as últimas mensagens e permitir tradução
-
-# Novas estruturas para gerenciar assinaturas
-assinaturas_ativas = {}  # {user_id: {"ativacao": datetime, "expiracao": datetime, "codigo": "string"}}
-codigos_utilizados = {}  # {codigo: user_id}
 
 LINK_PAGAMENTO = "https://pay.hotmart.com/C99134085F"
 
@@ -151,257 +154,110 @@ perguntas_por_tema = {
     ]
 }
 
-# Funções de ajuda para persistência de dados
-def salvar_dados():
-    dados = {
-        "perfil_usuario": perfil_usuario,
-        "historico_erros": historico_erros,
-        "pontos_usuario": pontos_usuario,
-        "streak_usuario": streak_usuario,
-        "ultima_interacao": {str(k): v.isoformat() if isinstance(v, datetime) else v for k, v in ultima_interacao.items()},
-        "assinaturas_ativas": {
-            str(k): {
-                "ativacao": v["ativacao"].isoformat() if isinstance(v["ativacao"], datetime) else v["ativacao"],
-                "expiracao": v["expiracao"].isoformat() if isinstance(v["expiracao"], datetime) else v["expiracao"],
-                "codigo": v["codigo"]
-            } for k, v in assinaturas_ativas.items()
-        },
-        "codigos_utilizados": codigos_utilizados
-    }
-    
-    with open("dados_bot.json", "w") as f:
-        json.dump(dados, f)
-
-def carregar_dados():
-    global perfil_usuario, historico_erros, pontos_usuario, streak_usuario, ultima_interacao, assinaturas_ativas, codigos_utilizados
-    
+# Função para migrar dados do JSON para o banco de dados
+def migrar_dados_do_json():
     try:
-        with open("dados_bot.json", "r") as f:
-            dados = json.load(f)
+        # Verificar se o arquivo de dados existe
+        if os.path.exists("dados_bot.json"):
+            with open("dados_bot.json", "r") as f:
+                dados_json = json.load(f)
             
-            perfil_usuario = dados.get("perfil_usuario", {})
-            historico_erros = dados.get("historico_erros", {})
-            pontos_usuario = dados.get("pontos_usuario", {})
-            streak_usuario = dados.get("streak_usuario", {})
-            
-            # Converter strings de data de volta para datetime
-            ultima_interacao_temp = dados.get("ultima_interacao", {})
-            ultima_interacao = {}
-            for k, v in ultima_interacao_temp.items():
-                try:
-                    ultima_interacao[int(k)] = datetime.fromisoformat(v) if isinstance(v, str) else v
-                except:
-                    ultima_interacao[int(k)] = v
-            
-            # Carregar assinaturas
-            assinaturas_temp = dados.get("assinaturas_ativas", {})
-            assinaturas_ativas = {}
-            for k, v in assinaturas_temp.items():
-                try:
-                    user_id = int(k)
-                    assinaturas_ativas[user_id] = {
-                        "ativacao": datetime.fromisoformat(v["ativacao"]) if isinstance(v["ativacao"], str) else v["ativacao"],
-                        "expiracao": datetime.fromisoformat(v["expiracao"]) if isinstance(v["expiracao"], str) else v["expiracao"],
-                        "codigo": v["codigo"]
-                    }
-                except Exception as e:
-                    logging.error(f"Erro ao converter assinatura: {e}")
-            
-            # Carregar códigos utilizados
-            codigos_utilizados = dados.get("codigos_utilizados", {})
-            
-    except FileNotFoundError:
-        logging.info("Arquivo de dados não encontrado. Criando novo.")
+            # Criar uma sessão do banco de dados
+            db = SessionLocal()
+            try:
+                # Chamar função de migração
+                migrar_dados_json_para_db(db, dados_json)
+                logging.info("Dados migrados com sucesso do JSON para o PostgreSQL")
+                
+                # Renomear o arquivo original para backup
+                os.rename("dados_bot.json", "dados_bot.json.bak")
+            finally:
+                db.close()
+        else:
+            logging.info("Arquivo de dados JSON não encontrado, nada para migrar")
     except Exception as e:
-        logging.error(f"Erro ao carregar dados: {e}")
-
+        logging.error(f"Erro ao migrar dados: {e}")
 
 # Funções para gamificação
 def adicionar_pontos(user_id, pontos):
-    pontos_usuario[user_id] = pontos_usuario.get(user_id, 0) + pontos
-    atualizar_streak(user_id)
-    salvar_dados()
-    return pontos_usuario[user_id]
-
-def atualizar_streak(user_id):
-    hoje = datetime.now().date()
-    
-    if user_id not in ultima_interacao:
-        streak_usuario[user_id] = 1
-        ultima_interacao[user_id] = datetime.now()
-        return
-    
-    ultima_data = ultima_interacao[user_id].date() if isinstance(ultima_interacao[user_id], datetime) else hoje
-    
-    # Se a última interação foi ontem, aumenta o streak
-    if (hoje - ultima_data).days == 1:
-        streak_usuario[user_id] = streak_usuario.get(user_id, 0) + 1
-    # Se a última interação foi hoje, mantém o streak
-    elif (hoje - ultima_data).days == 0:
-        if user_id not in streak_usuario:
-            streak_usuario[user_id] = 1
-    # Se passou mais de um dia, reseta o streak
-    else:
-        streak_usuario[user_id] = 1
-    
-    ultima_interacao[user_id] = datetime.now()
-    salvar_dados()
-
-# Função para ativar premium com código
-async def comando_ativar(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-
-    if not context.args:
-        await update.message.reply_text("Por favor, envie o comando no formato:\n/ativar seu_codigo")
-        return
-
-    codigo = context.args[0]
-    sucesso = False  # Flag de controle
-
+    # Criar uma sessão do banco de dados
+    db = SessionLocal()
     try:
-        # Verificar se o código já foi usado por outra pessoa
-        if codigo in codigos_utilizados and codigos_utilizados[codigo] != user_id:
-            await update.message.reply_text("⚠️ Este código já está sendo usado por outro usuário.")
-            return
+        # Adicionar pontos e retornar o total
+        total_pontos = adicionar_pontos_db(db, user_id, pontos)
+        return total_pontos
+    finally:
+        db.close()
 
-        # Ler os dados da planilha
-        resposta = requests.get(URL_PLANILHA)
-        resposta.raise_for_status()
-        dados_csv = resposta.content.decode('utf-8')
-        leitor_csv = csv.reader(StringIO(dados_csv))
-        lista_linhas = list(leitor_csv)
-
-        # Extrair os códigos válidos (coluna F = índice 5)
-        codigos_validos = [linha[5] for linha in lista_linhas[1:] if len(linha) >= 6]
-
-        if codigo in codigos_validos:
-            # Definir datas de ativação e expiração
-            data_ativacao = datetime.now()
-            data_expiracao = data_ativacao + timedelta(days=30)
-
-            # Registrar a assinatura
-            assinaturas_ativas[user_id] = {
-                "ativacao": data_ativacao,
-                "expiracao": data_expiracao,
-                "codigo": codigo
-            }
-
-            # Marcar código como usado por esse usuário
-            codigos_utilizados[codigo] = user_id
-
-            # Salvar no JSON
-            salvar_dados()
-
-            # Enviar mensagem de boas-vindas premium
-            data_expiracao_formatada = data_expiracao.strftime("%d/%m/%Y")
-            await update.message.reply_text(
-                "✨ *Acesso Premium Ativado!* ✨\n\n"
-                "Uhuuul! Agora você faz parte do *clube dos fluentes* 🧸💬\n"
-                "Pode treinar seu inglês comigo sem limites: *correções*, *conversas* e *muito aprendizado* te esperando! 🚀\n\n"
-                f"Sua assinatura é válida até: *{data_expiracao_formatada}*\n\n"
-                "Tô MUITO feliz de ter você aqui. *Bora evoluir juntos?* 💛\n\n"
-                "📌 *Comandos úteis:*\n"
-                "`/ativar [código]` – Ativa a assinatura com o código recebido\n"
-                "`/status` – Mostra o status atual da sua assinatura\n"
-                "`/premium` – Exibe informações sobre os benefícios premium",
-                parse_mode='Markdown'
-            )
-
-            sucesso = True  # tudo certo, não mostra mensagem de erro depois
-
-        else:
-            await update.message.reply_text("⚠️ Código inválido. Verifique se digitou corretamente.")
-
-    except Exception as e:
-        print("Erro ao acessar a planilha:", e)
-        if not sucesso:
-            await update.message.reply_text("❌ Ocorreu um erro ao verificar o código. Tente novamente mais tarde.")
-
-# Comando secreto para resetar a assinatura da Raquel (dev)
-async def resetarquel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-
-    # Substitua pelo seu ID real se quiser travar só pra você
-    if user_id != 7577122726:  # << substitua esse número pelo seu ID do Telegram
-        await update.message.reply_text("❌ Você não tem permissão para usar esse comando.")
-        return
-
-    # Remover assinatura ativa
-    assinaturas_ativas.pop(user_id, None)
-
-    # Remover código utilizado por você
-    for codigo, uid in list(codigos_utilizados.items()):
-        if uid == user_id:
-            del codigos_utilizados[codigo]
-
-    # Salvar as mudanças
-    salvar_dados()
-
-    await update.message.reply_text("🔄 Assinatura resetada com sucesso, Raquel! Pode testar tudo de novo 💛")
+# Essa função não é mais necessária, pois agora usamos o banco de dados
+# Mantida apenas para compatibilidade e para facilitar a migração
+def salvar_dados():
+    # Como agora usamos banco de dados, não precisamos salvar em JSON
+    # Esta função está mantida só para evitar erros em chamadas existentes
+    pass
 
 # Verificar acesso premium
 def verificar_acesso(user_id):
     agora = datetime.now()
     
-    # Verificar se o usuário tem assinatura ativa
-    if user_id in assinaturas_ativas:
-        # Verificar se a assinatura está dentro da validade
-        if agora <= assinaturas_ativas[user_id]["expiracao"]:
+    # Criar uma sessão do banco de dados
+    db = SessionLocal()
+    try:
+        # Verificar se o usuário tem assinatura premium ativa
+        if verificar_assinatura_premium(db, user_id):
             return True
-        else:
-            # Se expirou, remover da lista de assinaturas ativas
-            # (mas mantemos no registro de códigos utilizados para histórico)
-            assinaturas_ativas.pop(user_id)
-            salvar_dados()
+        
+        # Se não tem premium, verificar se está dentro do limite gratuito
+        interacoes = obter_contador_interacoes(db, user_id)
+        if interacoes >= LIMITE_INTERACOES_FREE:
             return False
-    
-    # Se o usuário já excedeu o limite gratuito
-    if interacoes_usuario.get(user_id, 0) >= LIMITE_INTERACOES_FREE:
-        return False
-    
-    # Se chegou aqui, o usuário está dentro do limite gratuito
-    # Verificação de tempo (para limites diários)
-    inicio = tempo_usuarios.get(user_id)
-    if not inicio:
-        tempo_usuarios[user_id] = agora
-    elif agora - inicio >= timedelta(hours=24):
-        # Reset do contador após 24 horas
-        interacoes_usuario[user_id] = 0
-        tempo_usuarios[user_id] = agora
-    
-    return True
+        
+        # Se chegou aqui, o usuário está dentro do limite gratuito
+        # Verificação de tempo (para limites diários)
+        inicio = tempo_usuarios.get(user_id)
+        if not inicio:
+            tempo_usuarios[user_id] = agora
+        elif agora - inicio >= timedelta(hours=24):
+            # Reset do contador após 24 horas
+            tempo_usuarios[user_id] = agora
+            # Não precisamos resetar o contador no banco, pois faremos consulta por data
+        
+        return True
+    finally:
+        db.close()
 
 # Função para verificar assinaturas expiradas e enviar notificação
 async def verificar_assinaturas_expiradas(context: ContextTypes.DEFAULT_TYPE):
-    agora = datetime.now()
-    usuarios_para_notificar = []
-    
-    for user_id, assinatura in list(assinaturas_ativas.items()):
-        # Se expirou hoje (entre 0 e 24 horas atrás)
-        if assinatura["expiracao"] < agora and assinatura["expiracao"] > agora - timedelta(days=1):
-            usuarios_para_notificar.append(user_id)
-            # Remover da lista de assinaturas ativas (já expirou)
-            assinaturas_ativas.pop(user_id)
-    
-    # Salvar alterações se houve remoções
-    if usuarios_para_notificar:
-        salvar_dados()
-    
-    # Enviar notificações
-    for user_id in usuarios_para_notificar:
-        try:
-            nome = perfil_usuario.get(user_id, {}).get("nome", "")
-            mensagem = (
-                f"Olá {nome}! 🧸\n\n"
-                f"Seu acesso premium ao Lana English expirou hoje. 😢\n\n"
-                f"Se você já renovou sua assinatura, use o comando /ativar com o novo código recebido.\n\n"
-                f"Para continuar evoluindo seu inglês sem interrupções, renove sua assinatura aqui:\n"
-                f"{LINK_PAGAMENTO}\n\n"
-                f"Estou ansiosa para continuar nossa jornada juntos! 💛"
-            )
-            await context.bot.send_message(chat_id=user_id, text=mensagem)
-        except Exception as e:
-            logging.error(f"Erro ao enviar notificação para {user_id}: {e}")
+    # Criar uma sessão do banco de dados
+    db = SessionLocal()
+    try:
+        # Obter usuários com assinaturas expiradas nas últimas 24 horas
+        usuarios_expirados = listar_assinaturas_expiradas(db, horas=24)
+        
+        # Enviar notificações
+        for usuario in usuarios_expirados:
+            try:
+                # Obter perfil do usuário para pegar o nome
+                perfil = obter_perfil(db, usuario.user_id)
+                nome = perfil.nivel if perfil else ""
+                
+                # Se não tiver perfil, tenta pegar o nome direto do usuário
+                if not nome and usuario.nome:
+                    nome = usuario.nome
+                
+                mensagem = (
+                    f"Olá {nome}! 🧸\n\n"
+                    f"Seu acesso premium ao Lana English expirou hoje. 😢\n\n"
+                    f"Se você já renovou sua assinatura, use o comando /ativar com o novo código recebido.\n\n"
+                    f"Para continuar evoluindo seu inglês sem interrupções, renove sua assinatura aqui:\n"
+                    f"{LINK_PAGAMENTO}\n\n"
+                    f"Estou ansiosa para continuar nossa jornada juntos! 💛"
+                )
+                await context.bot.send_message(chat_id=usuario.user_id, text=mensagem)
+            except Exception as e:
+                logging.error(f"Erro ao enviar notificação para {usuario.user_id}: {e}")
+    finally:
+        db.close()
 
 # Função para traduzir texto para português
 async def traduzir_para_portugues(texto):
@@ -564,7 +420,6 @@ Finalize mostrando a frase corrigida com clareza, iniciando com: ✅ Frase Corri
 Importante: Se não tiver palavras mal pronunciadas para corrigir, só fale: A pronuncia das palavras está correta.
 """
 
-
 # Função para detectar problemas de pronúncia
 async def analisar_pronuncia(transcricao, audio_path, nivel):
     try:
@@ -590,33 +445,41 @@ async def analisar_pronuncia(transcricao, audio_path, nivel):
     except Exception as e:
         return f"❌ Erro ao processar a análise: {str(e)}"
     
-
 # Função para recomendar material de estudo baseado nos erros
 async def recomendar_material(user_id):
-    if user_id not in historico_erros or len(historico_erros[user_id]) < 3:
-        return "Keep practicing more to get personalized recommendations! 🌱"
-    
-    # Compilar últimos erros
-    erros = [erro for _, erro in historico_erros[user_id][-10:]]
-    erros_texto = "\n".join(erros)
-    
-    nivel = perfil_usuario.get(user_id, {}).get("nivel", "intermediate")
-    
-    prompt = (
-        f"You are an English teacher helping a {nivel} level student. "
-        "Based on these errors the student made recently, recommend specific learning materials, "
-        "videos, or exercises that would help them improve. Be specific and concise. "
-        "Provide 2-3 recommendations maximum.\n\n"
-        f"Recent errors:\n{erros_texto}"
-    )
-    
-    resposta = openai_client.chat.completions.create(
-        model="gpt-3.5-turbo",
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.7
-    )
-    
-    return resposta.choices[0].message.content.strip()
+    # Buscar histórico de erros no banco de dados
+    db = SessionLocal()
+    try:
+        historico = obter_historico_erros(db, user_id, limite=10)
+        
+        if len(historico) < 3:
+            return "Keep practicing more to get personalized recommendations! 🌱"
+        
+        # Compilar erros
+        erros = [erro for _, erro in historico]
+        erros_texto = "\n".join(erros)
+        
+        # Obter nível do usuário
+        perfil = obter_perfil(db, user_id)
+        nivel = perfil.nivel if perfil else "intermediate"
+        
+        prompt = (
+            f"You are an English teacher helping a {nivel} level student. "
+            "Based on these errors the student made recently, recommend specific learning materials, "
+            "videos, or exercises that would help them improve. Be specific and concise. "
+            "Provide 2-3 recommendations maximum.\n\n"
+            f"Recent errors:\n{erros_texto}"
+        )
+        
+        resposta = openai_client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.7
+        )
+        
+        return resposta.choices[0].message.content.strip()
+    finally:
+        db.close()
 
 # Função para gerar áudio
 def gerar_audio_fala(texto, slow=False):
@@ -650,25 +513,33 @@ async def puxar_conversa(texto, tema, nivel):
 
 # Função para escolher pergunta temática
 def escolher_proxima_pergunta(user_id, tema=None):
-    if not tema:
-        tema = perfil_usuario.get(user_id, {}).get("tema_atual", "daily_life")
-    
-    usadas = conversas_usuario.get(user_id, [])
-    perguntas_tema = perguntas_por_tema.get(tema, perguntas_por_tema["daily_life"])
-    
-    restantes = list(set(perguntas_tema) - set(usadas))
-    if not restantes:
-        # Se todas as perguntas do tema foram usadas, reiniciar
-        conversas_usuario[user_id] = []
-        restantes = perguntas_tema
-    
-    pergunta = random.choice(restantes)
-    if user_id in conversas_usuario:
-        conversas_usuario[user_id].append(pergunta)
-    else:
-        conversas_usuario[user_id] = [pergunta]
-    
-    return pergunta
+    # Criar uma sessão do banco de dados
+    db = SessionLocal()
+    try:
+        # Se não especificou tema, obter do perfil
+        if not tema:
+            perfil = obter_perfil(db, user_id)
+            tema = perfil.objetivo if perfil and perfil.objetivo else "daily_life"
+        
+        # Obter perguntas já usadas para este tema
+        perguntas_usadas = obter_perguntas_usadas(db, user_id, tema)
+        perguntas_tema = perguntas_por_tema.get(tema, perguntas_por_tema["daily_life"])
+        
+        # Filtrar perguntas não usadas
+        restantes = list(set(perguntas_tema) - set(perguntas_usadas))
+        if not restantes:
+            # Se todas as perguntas do tema foram usadas, usar todas novamente
+            restantes = perguntas_tema
+        
+        # Escolher pergunta aleatória
+        pergunta = random.choice(restantes)
+        
+        # Registrar a pergunta usada
+        registrar_pergunta(db, user_id, pergunta)
+        
+        return pergunta
+    finally:
+        db.close()
 
 # Função para processar os botões de tradução
 async def traduzir_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -734,30 +605,35 @@ async def exibir_historico(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_id = update.callback_query.from_user.id
         is_command = False
     
-    historico = historico_erros.get(user_id, [])
-    
-    if not historico:
+    # Buscar histórico no banco de dados
+    db = SessionLocal()
+    try:
+        historico = obter_historico_erros(db, user_id, limite=5)
+        
+        if not historico:
+            if is_command:
+                await update.message.reply_text("📭 No corrections history found yet! Keep talking to build your progress!")
+            else:
+                await update.callback_query.edit_message_text(
+                    "📭 No corrections history found yet! Keep talking to build your progress!",
+                    reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="back_menu")]])
+                )
+            return
+        
+        resposta = "📚 **Your Recent Corrections**\n\n"
+        for idx, (original, correcao) in enumerate(historico, 1):
+            resposta += f"**{idx}.**\n🗣️ You: {original}\n Fixed: {correcao}\n\n"
+        
         if is_command:
-            await update.message.reply_text("📭 No corrections history found yet! Keep talking to build your progress!")
+            await update.message.reply_text(resposta, parse_mode='Markdown')
         else:
             await update.callback_query.edit_message_text(
-                "📭 No corrections history found yet! Keep talking to build your progress!",
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="back_menu")]])
+                resposta,
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="back_menu")]]),
+                parse_mode='Markdown'
             )
-        return
-    
-    resposta = "📚 **Your Recent Corrections**\n\n"
-    for idx, (original, correcao) in enumerate(historico[-5:], 1):
-        resposta += f"**{idx}.**\n🗣️ You: {original}\n Fixed: {correcao}\n\n"
-    
-    if is_command:
-        await update.message.reply_text(resposta, parse_mode='Markdown')
-    else:
-        await update.callback_query.edit_message_text(
-            resposta,
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="back_menu")]]),
-            parse_mode='Markdown'
-        )
+    finally:
+        db.close()
 
 async def comando_dicas(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -772,30 +648,37 @@ async def comando_dicas(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def comando_progresso(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     
-    pontos = pontos_usuario.get(user_id, 0)
-    streak = streak_usuario.get(user_id, 0)
-    erros_count = len(historico_erros.get(user_id, []))
-    
-    progresso_texto = (
-        f"📊 **Your Progress Stats**\n\n"
-        f"✨ Points: {pontos}\n"
-        f"🔥 Streak: {streak} days\n"
-        f"💬 Conversations: {interacoes_usuario.get(user_id, 0)}\n"
-        f"📝 Corrections: {erros_count}\n\n"
-    )
-    
-    # Verificar status da assinatura
-    if user_id in assinaturas_ativas:
-        data_expiracao = assinaturas_ativas[user_id]["expiracao"]
-        data_formatada = data_expiracao.strftime("%d/%m/%Y")
-        progresso_texto += f"🌟 Premium active until: {data_formatada}\n\n"
-    
-    if erros_count > 5:
-        progresso_texto += "Your learning is looking great! Keep practicing regularly for best results! 🌱"
-    else:
-        progresso_texto += "Keep practicing to see more detailed progress stats! 🌱"
-    
-    await update.message.reply_text(progresso_texto, parse_mode='Markdown')
+    # Buscar dados no banco de dados
+    db = SessionLocal()
+    try:
+        # Obter pontos, streak e contagens
+        pontos = obter_pontos(db, user_id)
+        streak = obter_streak(db, user_id)
+        interacoes = obter_contador_interacoes(db, user_id)
+        erros_count = db.query(HistoricoErros).filter(HistoricoErros.user_id == user_id).count()
+        
+        progresso_texto = (
+            f"📊 **Your Progress Stats**\n\n"
+            f"✨ Points: {pontos}\n"
+            f"🔥 Streak: {streak} days\n"
+            f"💬 Conversations: {interacoes}\n"
+            f"📝 Corrections: {erros_count}\n\n"
+        )
+        
+        # Verificar status da assinatura
+        usuario = obter_usuario(db, user_id)
+        if usuario and usuario.assinaturas_ativas and usuario.expiracao:
+            data_formatada = usuario.expiracao.strftime("%d/%m/%Y")
+            progresso_texto += f"🌟 Premium active until: {data_formatada}\n\n"
+        
+        if erros_count > 5:
+            progresso_texto += "Your learning is looking great! Keep practicing regularly for best results! 🌱"
+        else:
+            progresso_texto += "Keep practicing to see more detailed progress stats! 🌱"
+        
+        await update.message.reply_text(progresso_texto, parse_mode='Markdown')
+    finally:
+        db.close()
 
 async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -813,173 +696,176 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if user_id in estagio_usuario:
         del estagio_usuario[user_id]
     
-    if escolha == "practice":
-        # Mostrar opções de temas
-        keyboard = []
-        row = []
-        
-        for i, (tema_id, tema_nome) in enumerate(TEMAS.items()):
-            emoji = "🌟" if i % 8 == 0 else "🔸" if i % 8 == 1 else "🎭" if i % 8 == 2 else "🍽️" if i % 8 == 3 else "🎬" if i % 8 == 4 else "📱" if i % 8 == 5 else "🏃" if i % 8 == 6 else "📚"
-            row.append(InlineKeyboardButton(f"{emoji} {tema_nome}", callback_data=f"tema_{tema_id}"))
+    # Criar sessão do banco de dados
+    db = SessionLocal()
+    
+    try:
+        if escolha == "practice":
+            # Mostrar opções de temas
+            keyboard = []
+            row = []
             
-            if len(row) == 2 or i == len(TEMAS) - 1:
-                keyboard.append(row)
-                row = []
-        
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        await query.edit_message_text(
-            "Choose a conversation theme you'd like to practice:",
-            reply_markup=reply_markup
-        )
-        
-        return TEMA
+            for i, (tema_id, tema_nome) in enumerate(TEMAS.items()):
+                emoji = "🌟" if i % 8 == 0 else "🔸" if i % 8 == 1 else "🎭" if i % 8 == 2 else "🍽️" if i % 8 == 3 else "🎬" if i % 8 == 4 else "📱" if i % 8 == 5 else "🏃" if i % 8 == 6 else "📚"
+                row.append(InlineKeyboardButton(f"{emoji} {tema_nome}", callback_data=f"tema_{tema_id}"))
+                
+                if len(row) == 2 or i == len(TEMAS) - 1:
+                    keyboard.append(row)
+                    row = []
+            
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            await query.edit_message_text(
+                "Choose a conversation theme you'd like to practice:",
+                reply_markup=reply_markup
+            )
+            
+            return TEMA
 
-    elif escolha == "progress":
-        # Mostrar progresso do usuário
-        pontos = pontos_usuario.get(user_id, 0)
-        streak = streak_usuario.get(user_id, 0)
-        erros_count = len(historico_erros.get(user_id, []))
-        
-        progresso_texto = (
-            f"📊 **Your Progress Stats**\n\n"
-            f"✨ Points: {pontos}\n"
-            f"🔥 Streak: {streak} days\n"
-            f"💬 Conversations: {interacoes_usuario.get(user_id, 0)}\n"
-            f"📝 Corrections: {erros_count}\n\n"
-        )
-        
-        # Verificar status da assinatura
-        if user_id in assinaturas_ativas:
-            data_expiracao = assinaturas_ativas[user_id]["expiracao"]
-            data_formatada = data_expiracao.strftime("%d/%m/%Y")
-            progresso_texto += f"🌟 Premium active until: {data_formatada}\n\n"
-        
-        if erros_count > 5:
-            # Gerar gráfico de progresso
-            progresso_texto += "Your learning is looking great! Keep practicing regularly for best results! 🌱"
-        else:
-            progresso_texto += "Keep practicing to see more detailed progress stats! 🌱"
-        
-        keyboard = [
-            [InlineKeyboardButton("📜 Correction History", callback_data="history")],
-            [InlineKeyboardButton("🔙 Back to Menu", callback_data="back_menu")]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        await query.edit_message_text(progresso_texto, reply_markup=reply_markup, parse_mode='Markdown')
-        
-        return MENU
+        elif escolha == "progress":
+            # Mostrar progresso do usuário
+            pontos = obter_pontos(db, user_id)
+            streak = obter_streak(db, user_id)
+            interacoes = obter_contador_interacoes(db, user_id)
+            erros_count = db.query(HistoricoErros).filter(HistoricoErros.user_id == user_id).count()
+            
+            progresso_texto = (
+                f"📊 **Your Progress Stats**\n\n"
+                f"✨ Points: {pontos}\n"
+                f"🔥 Streak: {streak} days\n"
+                f"💬 Conversations: {interacoes}\n"
+                f"📝 Corrections: {erros_count}\n\n"
+            )
+            
+            # Verificar status da assinatura
+            usuario = obter_usuario(db, user_id)
+            if usuario and usuario.assinaturas_ativas and usuario.expiracao:
+                data_formatada = usuario.expiracao.strftime("%d/%m/%Y")
+                progresso_texto += f"🌟 Premium active until: {data_formatada}\n\n"
+            
+            if erros_count > 5:
+                # Gerar gráfico de progresso
+                progresso_texto += "Your learning is looking great! Keep practicing regularly for best results! 🌱"
+            else:
+                progresso_texto += "Keep practicing to see more detailed progress stats! 🌱"
+            
+            keyboard = [
+                [InlineKeyboardButton("📜 Correction History", callback_data="history")],
+                [InlineKeyboardButton("🔙 Back to Menu", callback_data="back_menu")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            await query.edit_message_text(progresso_texto, reply_markup=reply_markup, parse_mode='Markdown')
+            
+            return MENU
 
-    elif escolha == "tips":
-        # Gerar dicas personalizadas
-        recomendacoes = await recomendar_material(user_id)
-        
-        keyboard = [
-            [InlineKeyboardButton("🔙 Back to Menu", callback_data="back_menu")]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        await query.edit_message_text(
-            "📚 **Personalized Study Recommendations**\n\n" + recomendacoes,
-            reply_markup=reply_markup,
-            parse_mode='Markdown'
-        )
-        
-        return MENU
+        elif escolha == "tips":
+            # Gerar dicas personalizadas
+            recomendacoes = await recomendar_material(user_id)
+            
+            keyboard = [
+                [InlineKeyboardButton("🔙 Back to Menu", callback_data="back_menu")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            await query.edit_message_text(
+                "📚 **Personalized Study Recommendations**\n\n" + recomendacoes,
+                reply_markup=reply_markup,
+                parse_mode='Markdown'
+            )
+            
+            return MENU
 
-    elif escolha == "settings":
-        # Mostrar configurações
-        keyboard = [
-            [InlineKeyboardButton("🔤 Change Level", callback_data="change_level")],
-            [InlineKeyboardButton("👤 Change Name", callback_data="change_name")],
-            [InlineKeyboardButton("🔙 Back to Menu", callback_data="back_menu")]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
+        elif escolha == "settings":
+            # Mostrar configurações
+            keyboard = [
+                [InlineKeyboardButton("🔤 Change Level", callback_data="change_level")],
+                [InlineKeyboardButton("👤 Change Name", callback_data="change_name")],
+                [InlineKeyboardButton("🔙 Back to Menu", callback_data="back_menu")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            await query.edit_message_text(
+                "⚙️ **Settings**\n\nWhat would you like to change?",
+                reply_markup=reply_markup,
+                parse_mode='Markdown'
+            )
+            
+            return MENU
         
-        await query.edit_message_text(
-            "⚙️ **Settings**\n\nWhat would you like to change?",
-            reply_markup=reply_markup,
-            parse_mode='Markdown'
-        )
+        elif escolha == "back_menu":
+            # Voltar ao menu principal
+            keyboard = [
+                [InlineKeyboardButton("🎯 Start Practice", callback_data="practice")],
+                [InlineKeyboardButton("📊 My Progress", callback_data="progress")],
+                [InlineKeyboardButton("📚 Study Tips", callback_data="tips")],
+                [InlineKeyboardButton("🔄 Change Settings", callback_data="settings")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            # Obter informações do usuário
+            usuario = obter_usuario(db, user_id)
+            perfil = obter_perfil(db, user_id)
+            
+            nome = usuario.nome if usuario else "there"
+            nivel = perfil.nivel if perfil else "intermediate"
+            
+            await query.edit_message_text(
+                f"Ótimo, {nome}! Ajustado para o {nivel}\n\n"
+                "O que deseja agora?",
+                reply_markup=reply_markup
+            )
+            
+            return MENU
+        
+        elif escolha == "history":
+            # Mostrar histórico de correções
+            await exibir_historico(update, context)
+            return MENU
+        
+        elif escolha == "change_level":
+            # Mudar nível
+            keyboard = [
+                [InlineKeyboardButton("👶 Beginner", callback_data="nivel_beginner")],
+                [InlineKeyboardButton("👍 Intermediate", callback_data="nivel_intermediate")],
+                [InlineKeyboardButton("🚀 Advanced", callback_data="nivel_advanced")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            await query.edit_message_text(
+                "Qual o seu nível de inglês?",
+                reply_markup=reply_markup
+            )
+            
+            return NIVEL
+        
+        elif escolha == "change_name":
+            # Mudar nome
+            await query.edit_message_text(
+                "Por favor, envie o seu nome abaixo."
+            )
+            
+            estagio_usuario[user_id] = NOME
+            return NOME
         
         return MENU
-    
-    elif escolha == "back_menu":
-        # Voltar ao menu principal
-        keyboard = [
-            [InlineKeyboardButton("🎯 Start Practice", callback_data="practice")],
-            [InlineKeyboardButton("📊 My Progress", callback_data="progress")],
-            [InlineKeyboardButton("📚 Study Tips", callback_data="tips")],
-            [InlineKeyboardButton("🔄 Change Settings", callback_data="settings")]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        nome = perfil_usuario[user_id].get("nome", "there")
-        nivel = perfil_usuario[user_id].get("nivel", "intermediate")
-        
-        await query.edit_message_text(
-            f"Ótimo, {nome}! Ajustado para o {nivel}\n\n"
-            "O que deseja agora?",
-            reply_markup=reply_markup
-        )
-        
-        return MENU
-    
-    elif escolha == "history":
-        # Mostrar histórico de correções
-        await exibir_historico(update, context)
-        return MENU
-    
-    elif escolha == "change_level":
-        # Mudar nível
-        keyboard = [
-            [InlineKeyboardButton("👶 Beginner", callback_data="nivel_beginner")],
-            [InlineKeyboardButton("👍 Intermediate", callback_data="nivel_intermediate")],
-            [InlineKeyboardButton("🚀 Advanced", callback_data="nivel_advanced")]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        await query.edit_message_text(
-            "Qual o seu nível de inglês?",
-            reply_markup=reply_markup
-        )
-        
-        return NIVEL
-    
-    elif escolha == "change_name":
-        # Mudar nome
-        await query.edit_message_text(
-            "Por favor, envie o seu nome abaixo."
-        )
-        
-        estagio_usuario[user_id] = NOME
-        return NOME
-    
-    return MENU
+    finally:
+        db.close()
 
 # Handlers para o bot
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     
-    # Manter a assinatura premium mesmo após reset (como no comando reset)
-    premium_status = None
-    if user_id in assinaturas_ativas:
-        premium_status = assinaturas_ativas[user_id]
-    
     # Resetar o estado do usuário para iniciar fluxo
     estagio_usuario[user_id] = NOME
     
-    # Se já existir um perfil, limpar a configuração de estágio
-    if user_id in perfil_usuario:
-        del perfil_usuario[user_id]
-    
-    # Restaurar status premium após reset se existia
-    if premium_status:
-        assinaturas_ativas[user_id] = premium_status
-    
-    # Salvar dados modificados
-    salvar_dados()
+    # Verificar se existe usuário no banco
+    db = SessionLocal()
+    try:
+        # Verificar se o usuário tem assinatura premium ativa
+        premium_status = verificar_assinatura_premium(db, user_id)
+    finally:
+        db.close()
     
     await update.message.reply_text(
         "🌟 Welcome to Lana English 🧸 🌟\n"
@@ -1019,29 +905,28 @@ async def cancelar(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def resetar(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     
-    # Remover dados do usuário
-    if user_id in perfil_usuario:
-        del perfil_usuario[user_id]
-    
-    if user_id in estagio_usuario:
-        del estagio_usuario[user_id]
-    
-    # Manter a assinatura premium mesmo após reset
-    premium_status = None
-    if user_id in assinaturas_ativas:
-        premium_status = assinaturas_ativas[user_id]
-    
-    await update.message.reply_text(
-        "Seus dados foram resetados com sucesso!\n"
-        "Use /start para começar novamente."
-    )
-    
-    # Restaurar status premium após reset se existia
-    if premium_status:
-        assinaturas_ativas[user_id] = premium_status
-    
-    # Salvar mudanças
-    salvar_dados()
+    # Criar uma sessão do banco de dados
+    db = SessionLocal()
+    try:
+        # Obter status de assinatura antes de resetar
+        premium_status = verificar_assinatura_premium(db, user_id)
+        
+        # Remover perfil (mas manter usuário e assinatura)
+        perfil = obter_perfil(db, user_id)
+        if perfil:
+            db.delete(perfil)
+            db.commit()
+        
+        # Limpar estágio
+        if user_id in estagio_usuario:
+            del estagio_usuario[user_id]
+        
+        await update.message.reply_text(
+            "Seus dados foram resetados com sucesso!\n"
+            "Use /start para começar novamente."
+        )
+    finally:
+        db.close()
     
     return ConversationHandler.END
 
@@ -1049,11 +934,13 @@ async def nome_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     nome = update.message.text
     
-    # Guardar o nome
-    if user_id not in perfil_usuario:
-        perfil_usuario[user_id] = {}
-    
-    perfil_usuario[user_id]["nome"] = nome
+    # Guardar o nome no banco de dados
+    db = SessionLocal()
+    try:
+        # Atualizar/criar usuário
+        atualizar_usuario(db, user_id, nome=nome)
+    finally:
+        db.close()
     
     # Limpar o estágio após processar o nome
     if user_id in estagio_usuario and estagio_usuario[user_id] == NOME:
@@ -1082,24 +969,30 @@ async def nivel_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = query.from_user.id
     nivel = query.data.split("_")[1]
     
-    # Guardar o nível
-    if user_id not in perfil_usuario:
-        perfil_usuario[user_id] = {}
-    
-    perfil_usuario[user_id]["nivel"] = nivel
+    # Guardar o nível no banco de dados
+    db = SessionLocal()
+    try:
+        # Atualizar/criar perfil
+        atualizar_perfil(db, user_id, nivel=nivel)
+        
+        # Verificar se o usuário tem assinatura premium ativa
+        tem_premium = verificar_assinatura_premium(db, user_id)
+        
+        # Buscar nome do usuário
+        usuario = obter_usuario(db, user_id)
+        nome = usuario.nome if usuario else "there"
+        
+        # Texto adicional para usuários premium
+        texto_premium = ""
+        if tem_premium:
+            data_expiracao = usuario.expiracao.strftime("%d/%m/%Y")
+            texto_premium = f"\n\n🌟 Você tem acesso premium ativo até {data_expiracao}!"
+    finally:
+        db.close()
     
     # Garantir que o usuário não está mais no estágio de cadastro
     if user_id in estagio_usuario:
         del estagio_usuario[user_id]
-    
-    # Verificar se o usuário tem assinatura premium ativa
-    tem_premium = user_id in assinaturas_ativas and datetime.now() <= assinaturas_ativas[user_id]["expiracao"]
-    
-    # Texto adicional para usuários premium
-    texto_premium = ""
-    if tem_premium:
-        data_expiracao = assinaturas_ativas[user_id]["expiracao"].strftime("%d/%m/%Y")
-        texto_premium = f"\n\n🌟 Você tem acesso premium ativo até {data_expiracao}!"
     
     # Mostrar o menu principal
     keyboard = [
@@ -1110,8 +1003,6 @@ async def nivel_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    nome = perfil_usuario[user_id].get("nome", "there")
-    
     await query.edit_message_text(
         f"Great, {nome}! I'll adjust my feedback for {nivel} level speakers.{texto_premium}\n\n"
         "What would you like to do?",
@@ -1120,333 +1011,291 @@ async def nivel_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     return MENU
 
-# Handler para mensagens de texto
-async def tratar_texto(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# Função para ativar premium com código
+async def comando_ativar(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    texto = update.message.text
-    
-    # Verificar se tem um fluxo ativo de cadastro
-    if user_id in estagio_usuario:
-        # Se o usuário estiver no estágio de nome, processar o nome
-        if estagio_usuario[user_id] == NOME:
-            await nome_handler(update, context)
-            return
-    
-    # Verificar se o usuário já foi cadastrado
-    if user_id not in perfil_usuario:
-        await update.message.reply_text(
-            "Parece que você ainda não se cadastrou. Vamos começar?\n\n"
-            "Por favor, me diga seu nome:"
-        )
-        estagio_usuario[user_id] = NOME
+
+    if not context.args:
+        await update.message.reply_text("Por favor, envie o comando no formato:\n/ativar seu_codigo")
+        return
+
+    codigo = context.args[0]
+    sucesso = False  # Flag de controle
+
+    try:
+        # Criar uma sessão do banco de dados
+        db = SessionLocal()
+        try:
+            # Verificar se o código já foi usado por outra pessoa
+            codigo_usado_por = verificar_codigo_usado(db, codigo)
+            if codigo_usado_por and codigo_usado_por != user_id:
+                await update.message.reply_text("⚠️ Este código já está sendo usado por outro usuário.")
+                return
+
+            # Ler os dados da planilha
+            resposta = requests.get(URL_PLANILHA)
+            resposta.raise_for_status()
+            dados_csv = resposta.content.decode('utf-8')
+            leitor_csv = csv.reader(StringIO(dados_csv))
+            lista_linhas = list(leitor_csv)
+
+            # Extrair os códigos válidos (coluna F = índice 5)
+            codigos_validos = [linha[5] for linha in lista_linhas[1:] if len(linha) >= 6]
+
+            if codigo in codigos_validos:
+                # Ativar assinatura no banco de dados
+                data_expiracao = ativar_assinatura(db, user_id, codigo, dias=30)
+                
+                # Enviar mensagem de boas-vindas premium
+                data_expiracao_formatada = data_expiracao.strftime("%d/%m/%Y")
+                await update.message.reply_text(
+                    "✨ *Acesso Premium Ativado!* ✨\n\n"
+                    "Uhuuul! Agora você faz parte do *clube dos fluentes* 🧸💬\n"
+                    "Pode treinar seu inglês comigo sem limites: *correções*, *conversas* e *muito aprendizado* te esperando! 🚀\n\n"
+                    f"Sua assinatura é válida até: *{data_expiracao_formatada}*\n\n"
+                    "Tô MUITO feliz de ter você aqui. *Bora evoluir juntos?* 💛\n\n"
+                    "📌 *Comandos úteis:*\n"
+                    "`/ativar [código]` – Ativa a assinatura com o código recebido\n"
+                    "`/status` – Mostra o status atual da sua assinatura\n"
+                    "`/premium` – Exibe informações sobre os benefícios premium",
+                    parse_mode='Markdown'
+                )
+
+                sucesso = True  # tudo certo, não mostra mensagem de erro depois
+
+            else:
+                await update.message.reply_text("⚠️ Código inválido. Verifique se digitou corretamente.")
+
+        finally:
+            db.close()
+    except Exception as e:
+        print("Erro ao acessar a planilha:", e)
+        if not sucesso:
+            await update.message.reply_text("❌ Ocorreu um erro ao verificar o código. Tente novamente mais tarde.")
+
+
+# Comando secreto para resetar a assinatura da Raquel (dev)
+async def resetarquel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+
+    # Substitua pelo seu ID real se quiser travar só pra você
+    if user_id != 7577122726:  # << substitua esse número pelo seu ID do Telegram
+        await update.message.reply_text("❌ Você não tem permissão para usar esse comando.")
         return
     
-    # Verificar se o usuário tem acesso premium ou está dentro da cota gratuita
-    if not verificar_acesso(user_id):
-        # Verificar se o usuário tinha uma assinatura que expirou
-        if user_id in codigos_utilizados.values():
-            # Encontrar o código usado por este usuário
-            codigo_expirado = None
-            for codigo, usuario in codigos_utilizados.items():
-                if usuario == user_id:
-                    codigo_expirado = codigo
-                    break
-            
-            await update.message.reply_text(
-                "Ei! Percebi que sua assinatura premium expirou. 🧸\n\n"
-                "Para continuar aproveitando todas as funcionalidades ilimitadas, renove sua assinatura:\n\n"
-                f"{LINK_PAGAMENTO}\n\n"
-                "Depois de renovar, use o comando /ativar com o novo código recebido.\n\n"
-                "Estou ansiosa para continuar nosso aprendizado juntos! 💛"
-            )
-        else:
-            premium_text = (
-                "🧸 Ei! Acabou as interações grátis com a Lana English.\n"
-                "Tô amando ver sua evolução no inglês! 💬✨\n"
-                "Que tal desbloquear o acesso completo e continuar treinando comigo sem limites?\n\n"
-                "Com o plano completo, você ganha:\n"
-                "✅ Respostas ilimitadas\n"
-                "✅ Correções personalizadas\n"
-                "✅ Dicas exclusivas a cada áudio\n"
-                "✅ Treinos de conversação sem parar!\n\n"
-                '<a href="https://pay.hotmart.com/C99134085F">👉 CLIQUE AQUI E ASSINE</a>\n\n'
-                "Depois de assinar, envie aqui na conversa /ativar e o código gerado após o pagamento.\n\n"
-                "📌 Ex: /ativar HP14506899281022, o seu acesso Premium será liberado!\n\n"
-                "Te espero do outro lado com muito vocabulário, fluência e aquele abraço de ursa! 🐻💖.\n\n"
-            )
-
-            await update.message.reply_text(premium_text, parse_mode='HTML')
-            return
-
-# Incrementar contadores
-    interacoes_usuario[user_id] = interacoes_usuario.get(user_id, 0) + 1
-    
-    # Obter dados do usuário
-    perfil = perfil_usuario.get(user_id, {"nivel": "intermediate", "tema_atual": "daily_life"})
-    nivel = perfil.get("nivel", "intermediate")
-    tema_atual = perfil.get("tema_atual", "daily_life")
-    
-    # Informar que está processando
-    processando_msg = await update.message.reply_text("🔄 Analisando seu texto...")
-    
+    # Criar uma sessão do banco de dados
+    db = SessionLocal()
     try:
-        # Corrigir o texto
-        correcoes, frases_originais, explicacoes = await corrigir_texto_por_partes(texto, nivel)
-    
-        # Verificação adicional para garantir que temos uma resposta válida
-        if correcoes is None:
-            correcoes = "Não foi possível realizar a correção."
-            frases_originais = []
-            explicacoes = []
-    
-    # Adicionar pontos
-        pontos = 3  # Pontos base por interação de texto (menor que áudio)
-        if correcoes == "Perfect ✨":
-            pontos += 2  # Bônus para resposta perfeita
-    
-        pontos_totais = adicionar_pontos(user_id, pontos)
-    
-    # Salvar erros no histórico se houver
-        if correcoes != "Perfect ✨" and frases_originais and explicacoes:
-        # Limitar o histórico a 50 erros por usuário
-            if user_id not in historico_erros:
-                historico_erros[user_id] = []
-            elif len(historico_erros[user_id]) >= 50:
-                historico_erros[user_id].pop(0)
-        
-            for i, frase in enumerate(frases_originais):
-                if i < len(explicacoes):
-                    historico_erros[user_id].append((frase, explicacoes[i]))
-    
-    # Preparar resposta
-        if correcoes == "Perfect ✨":
-            resposta = "✅ Great job! Sua mensagem está perfeita!🧸🎉\n"
+        # Obter usuário
+        usuario = obter_usuario(db, user_id)
+        if usuario:
+            # Desativar assinatura
+            usuario.assinaturas_ativas = False
+            usuario.expiracao = None
+            db.commit()
+            
+            # Remover códigos utilizados
+            codigos = db.query(CodigosUtilizados).filter(CodigosUtilizados.user_id == user_id).all()
+            for codigo in codigos:
+                db.delete(codigo)
+            db.commit()
+            
+            await update.message.reply_text("🔄 Assinatura resetada com sucesso, Raquel! Pode testar tudo de novo 💛")
         else:
-            resposta = "📝 Aqui estão algumas correções:\n" + correcoes 
-            if explicacoes:
-                resposta += "\n".join(explicacoes[:2]) + "\n\n"
-        
-        
-        # Fazer uma pergunta para continuar a conversa
-        resposta_conversa = await conversar_sobre_tema(texto, tema_atual, nivel)
-        
-        # Deletar mensagem de processamento
-        await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=processando_msg.message_id)
-        
-        # Enviar feedback
-        await update.message.reply_text(resposta)
-        
-        # Enviar resposta de conversa em áudio com botão de tradução
-        caminho_resposta = gerar_audio_fala(resposta_conversa, slow=(nivel == "beginner"))
-        with open(caminho_resposta, "rb") as audio_file:
-            mensagem = await context.bot.send_voice(chat_id=update.effective_chat.id, voice=audio_file)
-        
-        # Salvar a mensagem para posterior tradução
-        if user_id not in ultimas_mensagens:
-            ultimas_mensagens[user_id] = {}
-        ultimas_mensagens[user_id][str(mensagem.message_id)] = resposta_conversa
-        
-        # Adicionar botão de tradução
-        keyboard = [
-            [InlineKeyboardButton("🇧🇷 Traduzir para Português", callback_data=f"traducao_{mensagem.message_id}")]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        await context.bot.edit_message_reply_markup(
-            chat_id=update.effective_chat.id,
-            message_id=mensagem.message_id,
-            reply_markup=reply_markup
-        )
-        
-        # Enviar texto da resposta
-        await update.message.reply_text(
-            f"🏆 +{pontos} points! (Total: {pontos_totais})\n"
-            f"🔥 Day streak: {streak_usuario.get(user_id, 1)}"
-        )
-        
-        # Limpar arquivos temporários
-        try:
-            os.remove(caminho_resposta)
-        except:
-            pass
-        
-        # Salvar dados
-        salvar_dados()
-        
-    except Exception as e:
-        logging.error(f"Erro no processamento de texto: {e}")
-        await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=processando_msg.message_id)
-        await update.message.reply_text(
-            "😔 Desculpe, tive problemas ao processar sua mensagem. Por favor, tente novamente."
-        )
+            await update.message.reply_text("⚠️ Usuário não encontrado no banco de dados.")
+    finally:
+        db.close()
 
-async def tratar_audio(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def comando_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     
-    # Verificar se tem um fluxo ativo de cadastro
-    if user_id in estagio_usuario:
-        # Se o usuário estiver no estágio de nome, processar o nome
-        if estagio_usuario[user_id] == NOME:
+    db = SessionLocal()
+    try:
+        usuario = obter_usuario(db, user_id)
+        
+        if usuario and usuario.assinaturas_ativas and usuario.expiracao:
+            data_expiracao = usuario.expiracao
+            agora = datetime.now()
+            
+            if data_expiracao > agora:
+                dias_restantes = (data_expiracao - agora).days
+                data_formatada = data_expiracao.strftime("%d/%m/%Y")
+                
+                await update.message.reply_text(
+                    f"🌟 **Status da sua assinatura premium** 🌟\n\n"
+                    f"• Status: ATIVO ✅\n"
+                    f"• Validade: até {data_formatada}\n"
+                    f"• Dias restantes: {dias_restantes} dias\n\n"
+                    f"Aproveite todas as funcionalidades premium! 🧸💕",
+                    parse_mode='Markdown'
+                )
+            else:
+                # Assinatura expirada (isso não deveria acontecer pois verificamos na função verificar_acesso)
+                # Atualizar o status no banco
+                usuario.assinaturas_ativas = False
+                db.commit()
+                
+                await update.message.reply_text(
+                    "⚠️ Sua assinatura premium expirou.\n\n"
+                    "Para continuar aproveitando todas as funcionalidades premium, renove sua assinatura:\n\n"
+                    f'<a href="{LINK_PAGAMENTO}">👉 CLIQUE AQUI E ASSINE</a>\n\n'
+                    "Depois de renovar, use o comando <b>/ativar</b> com o novo código recebido.",
+                    parse_mode='HTML'
+                )
+        else:
+            # Usuário não tem assinatura
             await update.message.reply_text(
-                "Por favor, digite seu nome em texto, não em áudio."
+                "🔒 Você ainda não tem uma assinatura premium ativa.\n\n"
+                "Adquira acesso ilimitado e desbloqueie todas as funcionalidades:\n\n"
+                f'<a href="{LINK_PAGAMENTO}">👉 CLIQUE AQUI E ASSINE</a>\n\n'
+                "Após a compra, use o comando <b>/ativar [código]</b> com o código recebido.",
+                parse_mode='HTML'
             )
-            return
+    finally:
+        db.close()
+
+
+async def comando_liberar(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
     
-    # Verificar se o usuário já foi cadastrado
-    if user_id not in perfil_usuario:
-        await update.message.reply_text(
-            "Parece que você ainda não se cadastrou. Vamos começar?\n\n"
-            "Por favor, me diga seu nome:"
-        )
-        estagio_usuario[user_id] = NOME
+    # Verificar se é o administrador (substitua pelo seu user_id)
+    if user_id != 123456789:  # Substitua pelo seu user_id do Telegram
+        await update.message.reply_text("Você não tem permissão para usar este comando.")
         return
     
-    # Verificar se o usuário tem acesso premium ou está dentro da cota gratuita
-    if not verificar_acesso(user_id):
-        # Verificar se o usuário tinha uma assinatura que expirou
-        if user_id in codigos_utilizados.values():
-            await update.message.reply_text(
-                "Ei! Percebi que sua assinatura premium expirou. 🧸\n\n"
-                "Para continuar aproveitando todas as funcionalidades ilimitadas, renove sua assinatura:\n\n"
-                f"{LINK_PAGAMENTO}\n\n"
-                "Depois de renovar, use o comando /ativar com o novo código recebido.\n\n"
-                "Estou ansiosa para continuar nosso aprendizado juntos! 💛"
-            )
-        else:
-            premium_text = (
-                "🧸 Ei! Acabou as interações grátis com a Lana English.\n"
-                "Tô amando ver sua evolução no inglês! 💬✨\n"
-                "Que tal desbloquear o acesso completo e continuar treinando comigo sem limites?\n\n"
-                "Com o plano completo, você ganha:\n"
-                "✅ Respostas ilimitadas\n"
-                "✅ Correções personalizadas\n"
-                "✅ Dicas exclusivas a cada áudio\n"
-                "✅ Treinos de conversação sem parar!\n\n"
-                '<a href="https://pay.hotmart.com/C99134085F">👉 CLIQUE AQUI E ASSINE</a>\n\n'
-                "Depois de assinar, envie aqui na conversa /ativar e o código gerado após o pagamento.\n\n"
-                "📌 Ex: /ativar HP16060606081022, o seu acesso Premium será liberado!\n\n"
-                "Te espero do outro lado com muito vocabulário, fluência e aquele abraço de ursa! 🐻💖.\n\n"
-            )
-
-            await update.message.reply_text(premium_text, parse_mode='HTML')
-            return
-
-# Incrementar contadores
-    interacoes_usuario[user_id] = interacoes_usuario.get(user_id, 0) + 1
-    
-    # Baixar áudio
-    file = await context.bot.get_file(update.message.voice.file_id)
-    ogg_path = tempfile.mktemp(suffix=".ogg")
-    await file.download_to_drive(ogg_path)
-    
-    # Converter para MP3
-    mp3_path = ogg_para_mp3(ogg_path)
-    
-    # Informar que está processando
-    processando_msg = await update.message.reply_text("🎧 Processando seu áudio...")
+    if not context.args or len(context.args) < 2:
+        await update.message.reply_text("Uso: /liberar [user_id] [dias]")
+        return
     
     try:
-        # Transcrever áudio
-        transcricao = await transcrever_audio(mp3_path)
+        target_id = int(context.args[0])
+        dias = int(context.args[1])
         
-        # Obter dados do usuário
-        perfil = perfil_usuario.get(user_id, {"nivel": "intermediate", "tema_atual": "daily_life"})
-        nivel = perfil.get("nivel", "intermediate")
-        tema_atual = perfil.get("tema_atual", "daily_life")
-        
-        # Corrigir o texto transcrito
-        correcoes, frases_originais, explicacoes = await corrigir_texto_por_partes(transcricao, nivel)
-        
-        # Analisar pronúncia
-        analise_pronuncia = await analisar_pronuncia(transcricao, mp3_path, nivel)
-        
-        # Adicionar pontos
-        pontos = 5  # Pontos base por interação
-        if correcoes == "Perfect ✨":
-            pontos += 3  # Bônus para resposta perfeita
-        
-        pontos_totais = adicionar_pontos(user_id, pontos)
-        
-        # Salvar erros no histórico se houver
-        if correcoes != "Perfect ✨" and frases_originais:
-            # Limitar o histórico a 50 erros por usuário
-            if user_id not in historico_erros:
-                historico_erros[user_id] = []
-            elif len(historico_erros[user_id]) >= 50:
-                historico_erros[user_id].pop(0)
-            
-            for i, frase in enumerate(frases_originais):
-                if i < len(explicacoes):
-                    historico_erros[user_id].append((frase, explicacoes[i]))
-        
-        # Preparar resposta
-        resposta = f"🗣️ Você disse:\n{transcricao}\n"
-        
-        if correcoes == "Perfect ✨":
-            resposta += "✅ Perfeito! Muito bem!🧸🎉\n"
-        else:
-            resposta += "📝 Aqui estão algumas correções:\n" + correcoes 
-            if explicacoes:
-                resposta += "\n".join(explicacoes[:2]) + "\n"
-        
-        # Adicionar feedback de pronúncia se não for perfeito
-        if correcoes != "Perfect ✨":
-            resposta += f"🗣️ Dicas de pronúncia:\n{analise_pronuncia}\n\n"
-        
-        # Fazer uma pergunta para continuar a conversa
-        resposta_conversa = await conversar_sobre_tema(transcricao, tema_atual, nivel)
-        
-        # Editar mensagem de processamento
-        await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=processando_msg.message_id)
-        
-        # Enviar feedback
-        await update.message.reply_text(resposta)
-        
-        # Enviar resposta de conversa com botão de tradução
-        caminho_resposta = gerar_audio_fala(resposta_conversa, slow=(nivel == "beginner"))
-        
-        with open(caminho_resposta, "rb") as audio_file:
-            mensagem = await context.bot.send_voice(chat_id=update.effective_chat.id, voice=audio_file)
-        
-        # Salvar a mensagem para posterior tradução
-        if user_id not in ultimas_mensagens:
-            ultimas_mensagens[user_id] = {}
-        ultimas_mensagens[user_id][str(mensagem.message_id)] = resposta_conversa
-        
-        # Adicionar botão de tradução
-        keyboard = [
-            [InlineKeyboardButton("🇧🇷 Traduzir para Português", callback_data=f"traducao_{mensagem.message_id}")]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        await context.bot.edit_message_reply_markup(
-            chat_id=update.effective_chat.id,
-            message_id=mensagem.message_id,
-            reply_markup=reply_markup
-        )
-        
-        await update.message.reply_text(
-            f"🏆 +{pontos} points! (Total: {pontos_totais})\n"
-            f"🔥 Day streak: {streak_usuario.get(user_id, 1)}"
-        )
-        
-        # Limpar arquivos temporários
+        db = SessionLocal()
         try:
-            os.remove(ogg_path)
-            os.remove(mp3_path)
-            os.remove(caminho_resposta)
+            # Configurar uma assinatura manual
+            data_expiracao = ativar_assinatura(db, target_id, "ADMIN_MANUAL", dias)
+            
+            data_formatada = data_expiracao.strftime("%d/%m/%Y")
+            await update.message.reply_text(f"Usuário {target_id} liberado com sucesso até {data_formatada}!")
+        finally:
+            db.close()
+    except ValueError:
+        await update.message.reply_text("ID de usuário ou número de dias inválido.")
+
+# Função geradora de gráficos
+async def gerar_grafico_progresso(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    
+    db = SessionLocal()
+    try:
+        # Verificar se há registros suficientes
+        erros_count = db.query(HistoricoErros).filter(HistoricoErros.user_id == user_id).count()
+        if erros_count < 5:
+            await update.message.reply_text("You need at least 5 conversation records to generate a progress graph.")
+            return
+        
+        # Dados para o gráfico
+        interacoes = obter_contador_interacoes(db, user_id)
+        precisao = (1 - (erros_count / interacoes)) * 100 if interacoes > 0 else 0
+        
+        # Criar o gráfico
+        plt.figure(figsize=(10, 6))
+        plt.bar(['Interactions', 'Corrections', 'Accuracy (%)'], [interacoes, erros_count, precisao])
+        plt.title('Your English Learning Progress')
+        plt.ylabel('Value')
+        plt.grid(axis='y', linestyle='--', alpha=0.7)
+        
+        # Salvar o gráfico temporariamente
+        graph_path = tempfile.mktemp(suffix='.png')
+        plt.savefig(graph_path)
+        plt.close()
+        
+        # Enviar o gráfico
+        with open(graph_path, 'rb') as f:
+            await context.bot.send_photo(
+                chat_id=update.effective_chat.id,
+                photo=f,
+                caption="📊 Your English progress graph. Keep practicing to improve!"
+            )
+        
+        # Limpar arquivo temporário
+        try:
+            os.remove(graph_path)
         except:
             pass
+    finally:
+        db.close()
+
+# Comando para gerar gráfico
+async def comando_grafico(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await gerar_grafico_progresso(update, context)
+
+async def meuid(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    await update.message.reply_text(f"Seu ID de usuário é: {user_id}")
+
+async def comando_premium(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    
+    # Verificar se o usuário já tem premium ativo
+    db = SessionLocal()
+    try:
+        tem_premium = verificar_assinatura_premium(db, user_id)
+        if tem_premium:
+            usuario = obter_usuario(db, user_id)
+            data_expiracao = usuario.expiracao.strftime("%d/%m/%Y")
+            await update.message.reply_text(
+                f"🌟Você já tem acesso premium ativo!🌟\n\n"
+                f"Sua assinatura é válida até: *{data_expiracao}*\n\n"
+                f"Aproveite todos os recursos exclusivos da Lana English! 🧸💕",
+                parse_mode='Markdown'
+            )
+            return
+    finally:
+        db.close()
+    
+    # Se não tem premium, mostrar informações sobre a assinatura
+    premium_text = (
+        "🧸 Ei! Acabou as interações grátis com a Lana English.\n"
+        "Tô amando ver sua evolução no inglês! 💬✨\n"
+        "Que tal desbloquear o acesso completo e continuar treinando comigo sem limites?\n\n"
+        "Com o plano completo, você ganha:\n"
+        "✅ Respostas ilimitadas\n"
+        "✅ Correções personalizadas\n"
+        "✅ Dicas exclusivas a cada áudio\n"
+        "✅ Treinos de conversação sem parar!\n\n"
+        '<a href="https://pay.hotmart.com/C99134085F">👉 CLIQUE AQUI E ASSINE</a>\n\n'
+        "Depois de assinar, envie aqui na conversa /ativar e o código gerado após o pagamento.\n\n"
+        "📌 Ex: /ativar HP18060709281022, o seu acesso Premium será liberado!\n\n"
+        "Te espero do outro lado com muito vocabulário, fluência e aquele abraço de ursa! 🐻💖.\n\n"
+    )
+
+    await update.message.reply_text(premium_text, parse_mode='HTML')
+
+async def comando_tema(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    
+    # Mostrar opções de temas
+    keyboard = []
+    row = []
+    
+    for i, (tema_id, tema_nome) in enumerate(TEMAS.items()):
+        emoji = "🌟" if i % 8 == 0 else "🔸" if i % 8 == 1 else "🎭" if i % 8 == 2 else "🍽️" if i % 8 == 3 else "🎬" if i % 8 == 4 else "📱" if i % 8 == 5 else "🏃" if i % 8 == 6 else "📚"
+        row.append(InlineKeyboardButton(f"{emoji} {tema_nome}", callback_data=f"tema_{tema_id}"))
         
-        # Salvar dados
-        salvar_dados()
-        
-    except Exception as e:
-        logging.error(f"Erro no processamento de áudio: {e}")
-        await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=processando_msg.message_id)
-        await update.message.reply_text(
-            "😔 Desculpe, tive dificuldades para processar seu áudio. Por favor, tente novamente."
-        )
+        if len(row) == 2 or i == len(TEMAS) - 1:
+            keyboard.append(row)
+            row = []
+    
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await update.message.reply_text(
+        "Choose a conversation theme you'd like to practice:",
+        reply_markup=reply_markup
+    )
+    
+    return TEMA
 
 async def tema_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -1455,18 +1304,28 @@ async def tema_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = query.from_user.id
     tema = query.data.split("_")[1]
     
-    # Guardar o tema escolhido
-    if user_id not in perfil_usuario:
-        perfil_usuario[user_id] = {}
-    
-    perfil_usuario[user_id]["tema_atual"] = tema
-    salvar_dados()
+    # Guardar o tema escolhido no banco de dados
+    db = SessionLocal()
+    try:
+        # Atualizar/criar perfil com o tema atual
+        perfil = obter_perfil(db, user_id)
+        if perfil:
+            perfil.objetivo = tema  # Usando o campo objetivo para armazenar o tema atual
+            db.commit()
+        else:
+            criar_perfil(db, user_id, objetivo=tema)
+        
+        # Obter nível do usuário
+        nivel = perfil.nivel if perfil else "intermediate"
+        
+        # Registrar a pergunta no banco de dados
+        pergunta = escolher_proxima_pergunta(user_id, tema)
+        registrar_pergunta(db, user_id, pergunta)
+    finally:
+        db.close()
     
     # Iniciar a prática
     tema_nome = TEMAS.get(tema, "Conversation")
-    nivel = perfil_usuario[user_id].get("nivel", "intermediate")
-    
-    pergunta = escolher_proxima_pergunta(user_id, tema)
     
     # Gerar áudio da pergunta
     caminho_audio = gerar_audio_fala(pergunta, slow=(nivel == "beginner"))
@@ -1500,56 +1359,41 @@ async def tema_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     return ConversationHandler.END
 
-# Comandos adicionais
-async def comando_tema(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    
-    # Mostrar opções de temas
-    keyboard = []
-    row = []
-    
-    for i, (tema_id, tema_nome) in enumerate(TEMAS.items()):
-        emoji = "🌟" if i % 8 == 0 else "🔸" if i % 8 == 1 else "🎭" if i % 8 == 2 else "🍽️" if i % 8 == 3 else "🎬" if i % 8 == 4 else "📱" if i % 8 == 5 else "🏃" if i % 8 == 6 else "📚"
-        row.append(InlineKeyboardButton(f"{emoji} {tema_nome}", callback_data=f"tema_{tema_id}"))
-        
-        if len(row) == 2 or i == len(TEMAS) - 1:
-            keyboard.append(row)
-            row = []
-    
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    await update.message.reply_text(
-        "Choose a conversation theme you'd like to practice:",
-        reply_markup=reply_markup
-    )
-    
-    return TEMA
-
 async def comando_pergunta(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     
     if not verificar_acesso(user_id):
         # Verificar se o usuário tinha uma assinatura que expirou
-        if user_id in codigos_utilizados.values():
-            await update.message.reply_text(
-                "Ei! Percebi que sua assinatura premium expirou. 🧸\n\n"
-                "Para continuar aproveitando todas as funcionalidades ilimitadas, renove sua assinatura:\n\n"
-                f"{LINK_PAGAMENTO}\n\n"
-                "Depois de renovar, use o comando /ativar com o novo código recebido.\n\n"
-                "Estou ansiosa para continuar nosso aprendizado juntos! 💛"
-            )
-        else:
-            await update.message.reply_text(
-                "⏰ Você atingiu seu limite diário de prática gratuita.\n\n"
-                "Para acesso ilimitado, atualize para nosso plano premium!\n\n"
-                f"[Fazer Upgrade Agora]({LINK_PAGAMENTO})",
-                parse_mode='Markdown'
-            )
+        db = SessionLocal()
+        try:
+            codigos = db.query(CodigosUtilizados).filter(CodigosUtilizados.user_id == user_id).first()
+            if codigos:
+                await update.message.reply_text(
+                    "Ei! Percebi que sua assinatura premium expirou. 🧸\n\n"
+                    "Para continuar aproveitando todas as funcionalidades ilimitadas, renove sua assinatura:\n\n"
+                    f"{LINK_PAGAMENTO}\n\n"
+                    "Depois de renovar, use o comando /ativar com o novo código recebido.\n\n"
+                    "Estou ansiosa para continuar nosso aprendizado juntos! 💛"
+                )
+            else:
+                await update.message.reply_text(
+                    "⏰ Você atingiu seu limite diário de prática gratuita.\n\n"
+                    "Para acesso ilimitado, atualize para nosso plano premium!\n\n"
+                    f"[Fazer Upgrade Agora]({LINK_PAGAMENTO})",
+                    parse_mode='Markdown'
+                )
+        finally:
+            db.close()
         return
     
     # Obter tema atual
-    tema_atual = perfil_usuario.get(user_id, {}).get("tema_atual", "daily_life")
-    nivel = perfil_usuario.get(user_id, {}).get("nivel", "intermediate")
+    db = SessionLocal()
+    try:
+        perfil = obter_perfil(db, user_id)
+        tema_atual = perfil.objetivo if perfil and perfil.objetivo else "daily_life"
+        nivel = perfil.nivel if perfil and perfil.nivel else "intermediate"
+    finally:
+        db.close()
     
     # Escolher próxima pergunta
     pergunta = escolher_proxima_pergunta(user_id, tema_atual)
@@ -1612,161 +1456,352 @@ async def comando_ajuda(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await update.message.reply_text(help_text, parse_mode='Markdown')
 
-async def comando_premium(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# Handler para mensagens de texto
+async def tratar_texto(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
+    texto = update.message.text
     
-    # Verificar se o usuário já tem premium ativo
-    if user_id in assinaturas_ativas and datetime.now() <= assinaturas_ativas[user_id]["expiracao"]:
-        data_expiracao = assinaturas_ativas[user_id]["expiracao"].strftime("%d/%m/%Y")
-        await update.message.reply_text(
-            f"🌟Você já tem acesso premium ativo!🌟\n\n"
-            f"Sua assinatura é válida até: *{data_expiracao}*\n\n"
-            f"Aproveite todos os recursos exclusivos da Lana English! 🧸💕",
-            parse_mode='Markdown'
-        )
-        return
+    # Verificar se tem um fluxo ativo de cadastro
+    if user_id in estagio_usuario:
+        # Se o usuário estiver no estágio de nome, processar o nome
+        if estagio_usuario[user_id] == NOME:
+            await nome_handler(update, context)
+            return
     
-    # Se não tem premium, mostrar informações sobre a assinatura
-    premium_text = (
-        "🧸 Ei! Acabou as interações grátis com a Lana English.\n"
-        "Tô amando ver sua evolução no inglês! 💬✨\n"
-        "Que tal desbloquear o acesso completo e continuar treinando comigo sem limites?\n\n"
-        "Com o plano completo, você ganha:\n"
-        "✅ Respostas ilimitadas\n"
-        "✅ Correções personalizadas\n"
-        "✅ Dicas exclusivas a cada áudio\n"
-        "✅ Treinos de conversação sem parar!\n\n"
-        '<a href="https://pay.hotmart.com/C99134085F">👉 CLIQUE AQUI E ASSINE</a>\n\n'
-        "Depois de assinar, envie aqui na conversa /ativar e o código gerado após o pagamento.\n\n"
-        "📌 Ex: /ativar HP18060709281022, o seu acesso Premium será liberado!\n\n"
-        "Te espero do outro lado com muito vocabulário, fluência e aquele abraço de ursa! 🐻💖.\n\n"
-    )
-
-    await update.message.reply_text(premium_text, parse_mode='HTML')
-
-async def comando_liberar(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    
-    # Verificar se é o administrador (substitua pelo seu user_id)
-    if user_id != 123456789:  # Substitua pelo seu user_id do Telegram
-        await update.message.reply_text("Você não tem permissão para usar este comando.")
-        return
-    
-    if not context.args or len(context.args) < 2:
-        await update.message.reply_text("Uso: /liberar [user_id] [dias]")
-        return
-    
+    # Verificar se o usuário já foi cadastrado
+    db = SessionLocal()
     try:
-        target_id = int(context.args[0])
-        dias = int(context.args[1])
-        
-        # Configurar uma assinatura manual
-        data_ativacao = datetime.now()
-        data_expiracao = data_ativacao + timedelta(days=dias)
-        
-        assinaturas_ativas[target_id] = {
-            "ativacao": data_ativacao,
-            "expiracao": data_expiracao,
-            "codigo": "ADMIN_MANUAL"
-        }
-        
-        salvar_dados()
-        
-        data_formatada = data_expiracao.strftime("%d/%m/%Y")
-        await update.message.reply_text(f"Usuário {target_id} liberado com sucesso até {data_formatada}!")
-    except ValueError:
-        await update.message.reply_text("ID de usuário ou número de dias inválido.")
-
-# Função geradora de gráficos
-async def gerar_grafico_progresso(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    
-    if user_id not in historico_erros or len(historico_erros[user_id]) < 5:
-        await update.message.reply_text("You need at least 5 conversation records to generate a progress graph.")
-        return
-    
-    # Dados para o gráfico
-    erros = len(historico_erros[user_id])
-    interacoes = interacoes_usuario.get(user_id, 0)
-    precisao = (1 - (erros / interacoes)) * 100 if interacoes > 0 else 0
-    
-    # Criar o gráfico
-    plt.figure(figsize=(10, 6))
-    plt.bar(['Interactions', 'Corrections', 'Accuracy (%)'], [interacoes, erros, precisao])
-    plt.title('Your English Learning Progress')
-    plt.ylabel('Value')
-    plt.grid(axis='y', linestyle='--', alpha=0.7)
-    
-    # Salvar o gráfico temporariamente
-    graph_path = tempfile.mktemp(suffix='.png')
-    plt.savefig(graph_path)
-    plt.close()
-    
-    # Enviar o gráfico
-    with open(graph_path, 'rb') as f:
-        await context.bot.send_photo(
-            chat_id=update.effective_chat.id,
-            photo=f,
-            caption="📊 Your English progress graph. Keep practicing to improve!"
-        )
-    
-    # Limpar arquivo temporário
-    try:
-        os.remove(graph_path)
-    except:
-        pass
-
-# Comando para gerar gráfico
-async def comando_grafico(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await gerar_grafico_progresso(update, context)
-
-# Função para verificar status da assinatura
-async def comando_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    
-    if user_id in assinaturas_ativas:
-        data_expiracao = assinaturas_ativas[user_id]["expiracao"]
-        agora = datetime.now()
-        
-        if data_expiracao > agora:
-            dias_restantes = (data_expiracao - agora).days
-            data_formatada = data_expiracao.strftime("%d/%m/%Y")
-            
+        usuario = obter_usuario(db, user_id)
+        if not usuario:
             await update.message.reply_text(
-                f"🌟 **Status da sua assinatura premium** 🌟\n\n"
-                f"• Status: ATIVO ✅\n"
-                f"• Validade: até {data_formatada}\n"
-                f"• Dias restantes: {dias_restantes} dias\n\n"
-                f"Aproveite todas as funcionalidades premium! 🧸💕",
-                parse_mode='Markdown'
+                "Parece que você ainda não se cadastrou. Vamos começar?\n\n"
+                "Por favor, me diga seu nome:"
             )
+            estagio_usuario[user_id] = NOME
+            return
+        
+        # Verificar se o usuário tem acesso premium ou está dentro da cota gratuita
+        if not verificar_acesso(user_id):
+            # Verificar se o usuário tinha uma assinatura que expirou
+            codigos = db.query(CodigosUtilizados).filter(CodigosUtilizados.user_id == user_id).first()
+            if codigos:
+                await update.message.reply_text(
+                    "Ei! Percebi que sua assinatura premium expirou. 🧸\n\n"
+                    "Para continuar aproveitando todas as funcionalidades ilimitadas, renove sua assinatura:\n\n"
+                    f"{LINK_PAGAMENTO}\n\n"
+                    "Depois de renovar, use o comando /ativar com o novo código recebido.\n\n"
+                    "Estou ansiosa para continuar nosso aprendizado juntos! 💛"
+                )
+            else:
+                premium_text = (
+                    "🧸 Ei! Acabou as interações grátis com a Lana English.\n"
+                    "Tô amando ver sua evolução no inglês! 💬✨\n"
+                    "Que tal desbloquear o acesso completo e continuar treinando comigo sem limites?\n\n"
+                    "Com o plano completo, você ganha:\n"
+                    "✅ Respostas ilimitadas\n"
+                    "✅ Correções personalizadas\n"
+                    "✅ Dicas exclusivas a cada áudio\n"
+                    "✅ Treinos de conversação sem parar!\n\n"
+                    '<a href="https://pay.hotmart.com/C99134085F">👉 CLIQUE AQUI E ASSINE</a>\n\n'
+                    "Depois de assinar, envie aqui na conversa /ativar e o código gerado após o pagamento.\n\n"
+                    "📌 Ex: /ativar HP14506899281022, o seu acesso Premium será liberado!\n\n"
+                    "Te espero do outro lado com muito vocabulário, fluência e aquele abraço de ursa! 🐻💖.\n\n"
+                )
+
+                await update.message.reply_text(premium_text, parse_mode='HTML')
+            return
+
+        # Incrementar contadores - registrar interação
+        adicionar_interacao(db, user_id, "texto", texto)
+        
+        # Obter dados do usuário
+        perfil = obter_perfil(db, user_id)
+        nivel = perfil.nivel if perfil and perfil.nivel else "intermediate"
+        tema_atual = perfil.objetivo if perfil and perfil.objetivo else "daily_life"
+    finally:
+        db.close()
+    
+    # Informar que está processando
+    processando_msg = await update.message.reply_text("🔄 Analisando seu texto...")
+    
+    try:
+        # Corrigir o texto
+        correcoes, frases_originais, explicacoes = await corrigir_texto_por_partes(texto, nivel)
+    
+        # Verificação adicional para garantir que temos uma resposta válida
+        if correcoes is None:
+            correcoes = "Não foi possível realizar a correção."
+            frases_originais = []
+            explicacoes = []
+    
+        # Adicionar pontos
+        pontos = 3  # Pontos base por interação de texto (menor que áudio)
+        if correcoes == "Perfect ✨":
+            pontos += 2  # Bônus para resposta perfeita
+    
+        pontos_totais = adicionar_pontos(user_id, pontos)
+    
+        # Salvar erros no histórico se houver
+        if correcoes != "Perfect ✨" and frases_originais and explicacoes:
+            db = SessionLocal()
+            try:
+                # Adicionar cada erro ao banco de dados
+                for i, frase in enumerate(frases_originais):
+                    if i < len(explicacoes):
+                        adicionar_erro(db, user_id, frase, explicacoes[i])
+            finally:
+                db.close()
+    
+        # Preparar resposta
+        if correcoes == "Perfect ✨":
+            resposta = "✅ Great job! Sua mensagem está perfeita!🧸🎉\n"
         else:
-            # Assinatura expirada (isso não deveria acontecer pois verificamos na função verificar_acesso)
-            await update.message.reply_text(
-                "⚠️ Sua assinatura premium expirou.\n\n"
-                "Para continuar aproveitando todas as funcionalidades premium, renove sua assinatura:\n\n"
-                f'<a href="{LINK_PAGAMENTO}">👉 CLIQUE AQUI E ASSINE</a>\n\n'
-                "Depois de renovar, use o comando <b>/ativar</b> com o novo código recebido.",
-                parse_mode='HTML'
-            )
-    else:
-        # Usuário não tem assinatura
+            resposta = "📝 Aqui estão algumas correções:\n" + correcoes 
+            if explicacoes:
+                resposta += "\n".join(explicacoes[:2]) + "\n\n"
+        
+        # Fazer uma pergunta para continuar a conversa
+        resposta_conversa = await conversar_sobre_tema(texto, tema_atual, nivel)
+        
+        # Deletar mensagem de processamento
+        await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=processando_msg.message_id)
+        
+        # Enviar feedback
+        await update.message.reply_text(resposta)
+        
+        # Enviar resposta de conversa em áudio com botão de tradução
+        caminho_resposta = gerar_audio_fala(resposta_conversa, slow=(nivel == "beginner"))
+        with open(caminho_resposta, "rb") as audio_file:
+            mensagem = await context.bot.send_voice(chat_id=update.effective_chat.id, voice=audio_file)
+        
+        # Salvar a mensagem para posterior tradução
+        if user_id not in ultimas_mensagens:
+            ultimas_mensagens[user_id] = {}
+        ultimas_mensagens[user_id][str(mensagem.message_id)] = resposta_conversa
+        
+        # Adicionar botão de tradução
+        keyboard = [
+            [InlineKeyboardButton("🇧🇷 Traduzir para Português", callback_data=f"traducao_{mensagem.message_id}")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await context.bot.edit_message_reply_markup(
+            chat_id=update.effective_chat.id,
+            message_id=mensagem.message_id,
+            reply_markup=reply_markup
+        )
+        
+        # Obter dados atualizados do streak
+        db = SessionLocal()
+        try:
+            streak_atual = obter_streak(db, user_id)
+        finally:
+            db.close()
+        
+        # Enviar texto da resposta
         await update.message.reply_text(
-            "🔒 Você ainda não tem uma assinatura premium ativa.\n\n"
-            "Adquira acesso ilimitado e desbloqueie todas as funcionalidades:\n\n"
-            f'<a href="{LINK_PAGAMENTO}">👉 CLIQUE AQUI E ASSINE</a>\n\n'
-            "Após a compra, use o comando <b>/ativar [código]</b> com o código recebido.",
-            parse_mode='HTML'
+            f"🏆 +{pontos} points! (Total: {pontos_totais})\n"
+            f"🔥 Day streak: {streak_atual}"
+        )
+        
+        # Limpar arquivos temporários
+        try:
+            os.remove(caminho_resposta)
+        except:
+            pass
+        
+    except Exception as e:
+        logging.error(f"Erro no processamento de texto: {e}")
+        await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=processando_msg.message_id)
+        await update.message.reply_text(
+            "😔 Desculpe, tive problemas ao processar sua mensagem. Por favor, tente novamente."
         )
 
-async def meuid(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def tratar_audio(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    await update.message.reply_text(f"Seu ID de usuário é: {user_id}")
+    
+    # Verificar se tem um fluxo ativo de cadastro
+    if user_id in estagio_usuario:
+        # Se o usuário estiver no estágio de nome, processar o nome
+        if estagio_usuario[user_id] == NOME:
+            await update.message.reply_text(
+                "Por favor, digite seu nome em texto, não em áudio."
+            )
+            return
+    
+    # Verificar se o usuário já foi cadastrado
+    db = SessionLocal()
+    try:
+        usuario = obter_usuario(db, user_id)
+        if not usuario:
+            await update.message.reply_text(
+                "Parece que você ainda não se cadastrou. Vamos começar?\n\n"
+                "Por favor, me diga seu nome:"
+            )
+            estagio_usuario[user_id] = NOME
+            return
+        
+        # Verificar se o usuário tem acesso premium ou está dentro da cota gratuita
+        if not verificar_acesso(user_id):
+            # Verificar se o usuário tinha uma assinatura que expirou
+            codigos = db.query(CodigosUtilizados).filter(CodigosUtilizados.user_id == user_id).first()
+            if codigos:
+                await update.message.reply_text(
+                    "Ei! Percebi que sua assinatura premium expirou. 🧸\n\n"
+                    "Para continuar aproveitando todas as funcionalidades ilimitadas, renove sua assinatura:\n\n"
+                    f"{LINK_PAGAMENTO}\n\n"
+                    "Depois de renovar, use o comando /ativar com o novo código recebido.\n\n"
+                    "Estou ansiosa para continuar nosso aprendizado juntos! 💛"
+                )
+            else:
+                premium_text = (
+                    "🧸 Ei! Acabou as interações grátis com a Lana English.\n"
+                    "Tô amando ver sua evolução no inglês! 💬✨\n"
+                    "Que tal desbloquear o acesso completo e continuar treinando comigo sem limites?\n\n"
+                    "Com o plano completo, você ganha:\n"
+                    "✅ Respostas ilimitadas\n"
+                    "✅ Correções personalizadas\n"
+                    "✅ Dicas exclusivas a cada áudio\n"
+                    "✅ Treinos de conversação sem parar!\n\n"
+                    '<a href="https://pay.hotmart.com/C99134085F">👉 CLIQUE AQUI E ASSINE</a>\n\n'
+                    "Depois de assinar, envie aqui na conversa /ativar e o código gerado após o pagamento.\n\n"
+                    "📌 Ex: /ativar HP16060606081022, o seu acesso Premium será liberado!\n\n"
+                    "Te espero do outro lado com muito vocabulário, fluência e aquele abraço de ursa! 🐻💖.\n\n"
+                )
+
+                await update.message.reply_text(premium_text, parse_mode='HTML')
+            return
+
+        # Incrementar contadores - registrar interação
+        adicionar_interacao(db, user_id, "audio")
+        
+        # Obter dados do usuário
+        perfil = obter_perfil(db, user_id)
+        nivel = perfil.nivel if perfil and perfil.nivel else "intermediate"
+        tema_atual = perfil.objetivo if perfil and perfil.objetivo else "daily_life"
+    finally:
+        db.close()
+
+    # Baixar áudio
+    file = await context.bot.get_file(update.message.voice.file_id)
+    ogg_path = tempfile.mktemp(suffix=".ogg")
+    await file.download_to_drive(ogg_path)
+    
+    # Converter para MP3
+    mp3_path = ogg_para_mp3(ogg_path)
+    
+    # Informar que está processando
+    processando_msg = await update.message.reply_text("🎧 Processando seu áudio...")
+    
+    try:
+        # Transcrever áudio
+        transcricao = await transcrever_audio(mp3_path)
+        
+        # Corrigir o texto transcrito
+        correcoes, frases_originais, explicacoes = await corrigir_texto_por_partes(transcricao, nivel)
+        
+        # Analisar pronúncia
+        analise_pronuncia = await analisar_pronuncia(transcricao, mp3_path, nivel)
+        
+        # Adicionar pontos
+        pontos = 5  # Pontos base por interação
+        if correcoes == "Perfect ✨":
+            pontos += 3  # Bônus para resposta perfeita
+        
+        pontos_totais = adicionar_pontos(user_id, pontos)
+        
+        # Salvar erros no histórico se houver
+        if correcoes != "Perfect ✨" and frases_originais:
+            db = SessionLocal()
+            try:
+                # Adicionar cada erro ao banco de dados
+                for i, frase in enumerate(frases_originais):
+                    if i < len(explicacoes):
+                        adicionar_erro(db, user_id, frase, explicacoes[i])
+            finally:
+                db.close()
+        
+        # Preparar resposta
+        resposta = f"🗣️ Você disse:\n{transcricao}\n"
+        
+        if correcoes == "Perfect ✨":
+            resposta += "✅ Perfeito! Muito bem!🧸🎉\n"
+        else:
+            resposta += "📝 Aqui estão algumas correções:\n" + correcoes 
+            if explicacoes:
+                resposta += "\n".join(explicacoes[:2]) + "\n"
+        
+        # Adicionar feedback de pronúncia se não for perfeito
+        if correcoes != "Perfect ✨":
+            resposta += f"🗣️ Dicas de pronúncia:\n{analise_pronuncia}\n\n"
+        
+        # Fazer uma pergunta para continuar a conversa
+        resposta_conversa = await conversar_sobre_tema(transcricao, tema_atual, nivel)
+        
+        # Editar mensagem de processamento
+        await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=processando_msg.message_id)
+        
+        # Enviar feedback
+        await update.message.reply_text(resposta)
+        
+        # Enviar resposta de conversa com botão de tradução
+        caminho_resposta = gerar_audio_fala(resposta_conversa, slow=(nivel == "beginner"))
+        
+        with open(caminho_resposta, "rb") as audio_file:
+            mensagem = await context.bot.send_voice(chat_id=update.effective_chat.id, voice=audio_file)
+        
+        # Salvar a mensagem para posterior tradução
+        if user_id not in ultimas_mensagens:
+            ultimas_mensagens[user_id] = {}
+        ultimas_mensagens[user_id][str(mensagem.message_id)] = resposta_conversa
+        
+        # Adicionar botão de tradução
+        keyboard = [
+            [InlineKeyboardButton("🇧🇷 Traduzir para Português", callback_data=f"traducao_{mensagem.message_id}")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await context.bot.edit_message_reply_markup(
+            chat_id=update.effective_chat.id,
+            message_id=mensagem.message_id,
+            reply_markup=reply_markup
+        )
+        
+        # Obter dados atualizados do streak
+        db = SessionLocal()
+        try:
+            streak_atual = obter_streak(db, user_id)
+        finally:
+            db.close()
+        
+        await update.message.reply_text(
+            f"🏆 +{pontos} points! (Total: {pontos_totais})\n"
+            f"🔥 Day streak: {streak_atual}"
+        )
+        
+        # Limpar arquivos temporários
+        try:
+            os.remove(ogg_path)
+            os.remove(mp3_path)
+            os.remove(caminho_resposta)
+        except:
+            pass
+        
+    except Exception as e:
+        logging.error(f"Erro no processamento de áudio: {e}")
+        await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=processando_msg.message_id)
+        await update.message.reply_text(
+            "😔 Desculpe, tive dificuldades para processar seu áudio. Por favor, tente novamente."
+        )
 
 # Função principal (versão para webhook no Render)
 def main():
-    # Carregar dados salvos
-    carregar_dados()
+    # Inicializar o banco de dados e criar tabelas
+    engine = create_engine(db_url)
+    Base.metadata.create_all(engine)
+    
+    # Migrar dados do JSON para o PostgreSQL
+    migrar_dados_do_json()
     
     # URL do webhook fornecida pelo Render
     PORT = int(os.environ.get('PORT', 8080))
