@@ -382,9 +382,11 @@ Você é uma professora de inglês experiente, especializada em ensinar alunos b
    - Vocabulário
    - Conjugação verbal
    - Estrutura da frase
-   De forma natural e humana, sem soar robótico, e para explicar fale, sua frase precisa de algumas correções...
+   Use linguagem clara e objetiva. Para explicar, diga algo como: "Sua frase precisa de algumas correções:
 
-2. Liste de 1 a 4 palavras ou expressões mal pronunciadas ou com sotaque forte que afete a clareza. Use o seguinte formato:
+⚠️ Use sempre essa **mesma frase corrigida** em todos os trechos do feedback. Não crie versões diferentes.
+
+2. Liste de 1 a 4 palavras ou expressões mal pronunciadas ou com sotaque forte que afete a clareza. Analise a frase dita pelo aluno e forneça **apenas uma frase** com a correção natural e gramaticalmente correta. Use o seguinte formato:
 
 1. Palavra: {{palavra dita pelo aluno}} (Em inglês)
 2. Como foi pronunciada: {{forma percebida}}
@@ -401,7 +403,7 @@ Finalize com:
 4. Nunca traduza automaticamente frases em português. Se o áudio estiver em português, diga:
 "Por favor, envie um áudio em inglês para que eu possa analisar sua fala."
 
-Seja clara, encorajadora e objetiva e envie a Frase corrigida somente 1 vez no final.
+Seja clara, encorajadora e objetiva e envie a Frase corrigida somente uma vez no final.
 """
 
 # Função que gera o prompt com base na transcrição
