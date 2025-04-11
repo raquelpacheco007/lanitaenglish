@@ -509,19 +509,19 @@ Você é uma professora de inglês experiente, especializada em ensinar alunos b
    - Vocabulário
    - Conjugação verbal
    - Estrutura da frase
-   De forma natural e humana, sem soar robótico.
+   De forma natural e humana, sem soar robótico, de forma direta e resumida.
 
 2. Liste de 1 a 4 palavras ou expressões mal pronunciadas ou com sotaque forte que afete a clareza. Use o seguinte formato:
 
 1. Palavra: {{palavra dita pelo aluno}}
 2. Como foi pronunciada: {{forma percebida}}
 3. Pronúncia correta (IPA): {{ex: /ˈæb.sə.luːt.li/}}
-4. Dica prática (em português): {{dica para melhorar articulação ou entonação}}
+4. Dica prática: {{dica para melhorar articulação ou entonação}} (dica em português)
 
 ⚠️ Se o aluno tiver sotaque brasileiro ou britânico, mas a fala for compreensível, **não corrija**.
 
 3. Apresente a frase corrigida no final com o formato:
-✅ Frase corrigida: {{frase correta, natural e completa}}
+✅ {{frase correta, natural e completa}}
 
 4. Nunca traduza automaticamente frases em português. Se o áudio estiver em português, diga:
 "Por favor, envie um áudio em inglês para que eu possa analisar sua fala."
@@ -1199,7 +1199,7 @@ async def tratar_texto(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if correcoes == "Perfect ✨":
             resposta = "✅ Great job! Sua mensagem está perfeita!🧸🎉\n"
         else:
-            resposta = "📝 Aqui estão algumas correções:\n" + correcoes + "\n"
+            resposta = "📝 Aqui estão algumas correções:\n" + correcoes + 
             if explicacoes:
                 resposta += "\n".join(explicacoes[:2]) + "\n\n"
         
@@ -1362,7 +1362,7 @@ async def tratar_audio(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if correcoes == "Perfect ✨":
             resposta += "✅ Perfeito! Muito bem!🧸🎉\n"
         else:
-            resposta += "📝 Aqui estão algumas correções:\n" + correcoes + "\n"
+            resposta += "📝 Aqui estão algumas correções:\n" + correcoes + 
             if explicacoes:
                 resposta += "\n".join(explicacoes[:2]) + "\n"
         
