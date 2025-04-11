@@ -403,6 +403,10 @@ Finalize com:
 4. Nunca traduza automaticamente frases em português. Se o áudio estiver em português, diga:
 "Por favor, envie um áudio em inglês para que eu possa analisar sua fala."
 
+⚠️ Muito importante: 
+Nunca inclua frases genéricas ou exemplos externos como “Student sentence: ...” ou “Your response: ...”.
+Corrija **somente** a frase do aluno, sem comparações ou exemplos adicionais.
+
 Seja clara, encorajadora e objetiva e envie a Frase corrigida somente uma vez no final.
 """
 
