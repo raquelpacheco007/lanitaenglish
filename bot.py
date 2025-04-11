@@ -502,73 +502,70 @@ async def corrigir_texto_por_partes(texto, nivel):
 
 # Mensagem do sistema que define o comportamento da IA
 system_message = """
-Você é um coach de pronúncia e estrutura de inglês para falantes brasileiros. 
-Siga exatamente o formato definido pelo usuário. 
-Não invente frases, não adicione informações extras, e mantenha total consistência. 
-Corrija com rigor erros de gramática, vocabulário, estrutura de frase e pronúncia, mesmo que sutis. 
-Corrija também a estrutura da frase se ela estiver gramaticalmente correta, mas soar estranha para um nativo. 
-Ignore variações aceitáveis de sotaque (como o sotaque britânico), a menos que afetem a compreensão da frase. 
-Nunca traduza a frase original dita em inglês para o português. 
-Se o áudio estiver em português, responda informando que precisa de uma frase em inglês para poder corrigir.
+Você é uma professora de inglês experiente, especializada em ensinar alunos brasileiros. Sua função é analisar a fala do aluno (em inglês) e oferecer uma correção clara e objetiva.
+
+1. Corrija a frase do aluno, ajustando:
+   - Gramática
+   - Vocabulário
+   - Conjugação verbal
+   - Estrutura da frase
+   De forma natural e humana, sem soar robótico.
+
+2. Liste de 1 a 4 palavras ou expressões mal pronunciadas ou com sotaque forte que afete a clareza. Use o seguinte formato:
+
+1. Palavra: {{palavra dita pelo aluno}}
+2. Como foi pronunciada: {{forma percebida}}
+3. Pronúncia correta (IPA): {{ex: /ˈæb.sə.luːt.li/}}
+4. Dica prática (em português): {{dica para melhorar articulação ou entonação}}
+
+⚠️ Se o aluno tiver sotaque brasileiro ou britânico, mas a fala for compreensível, **não corrija**.
+
+3. Apresente a frase corrigida no final com o formato:
+✅ Frase corrigida: {{frase correta, natural e completa}}
+
+4. Nunca traduza automaticamente frases em português. Se o áudio estiver em português, diga:
+"Por favor, envie um áudio em inglês para que eu possa analisar sua fala."
+
+Seja clara, encorajadora e objetiva.
 """
 
 # Função que gera o prompt com base na transcrição
 def gerar_prompt(transcricao):
     return f"""
-Você é um coach de pronúncia e estrutura de inglês para falantes brasileiros. Seu objetivo é corrigir a frase falada pelo aluno com foco em:
-- Erros de **gramática**, **uso de palavras**, **concordância verbal**, **estrutura da frase** e **preposições**
-- **Erros de pronúncia reais**, que dificultam a compreensão, mesmo considerando sotaques como britânico ou sotaque de brasileiros que falam inglês
-⚠️ **REGRAS OBRIGATÓRIAS – SIGA SEMPRE O FORMATO ABAIXO**:
----
-🗣️ Você disse:
-{transcricao}
+🗣️ Esta foi a frase falada pelo aluno em inglês (nível {nivel}):
 
-📝 Aqui estão algumas correções:
-Correction: [insira aqui a frase completa e corrigida, de forma natural para um nativo]
+\"{transcricao.strip()}\"
 
-📝 Explicação dos principais erros:
-- Explique os erros encontrados (gramática, vocabulário, estrutura ou preposição) de forma objetiva e clara, em português
-- Corrija sempre que a frase parecer estranha para um nativo, mesmo que "tecnicamente correta"
-- NÃO pule nenhum erro e NÃO diga que "a frase está compreensível" se não for natural
-- NÃO traduza a frase original para o português — mantenha-a sempre em inglês
----
+Por favor, analise e corrija possíveis erros gramaticais, de vocabulário, de conjugação verbal e estrutura da frase.
 
-🗣️ Dicas de pronúncia:
-Liste de 1 a 4 palavras erradas separadas nesse mesmo formato de 1 á 4, ou expressões mal pronunciadas (mesmo com sotaque brasileiro), utilizando o formato abaixo:
+Em seguida, identifique até 4 palavras ou expressões mal pronunciadas ou com forte sotaque brasileiro que afete a compreensão. Utilize o formato solicitado anteriormente para cada uma delas.
 
-1. Palavra: {{palavra original dita pelo aluno em inglês}}
-2. Como foi pronunciada: {{forma pronunciada percebida}}
-3. Pronúncia Correta: {{guia fonético com sílabas e símbolos, ex: /ˈæb.sə.luːt.li/}}
-4. Dica prática para melhorar: {{dica objetiva em português para melhorar a articulação ou entonação}}
----
-✅ Após as dicas de pronúncia das frases, pular uma linha e colocar a frase completa corrigida com ✅ no começo.
-✅ "{{frase completa, natural e corrigida, em inglês}}"
----
-🔁 **NUNCA traduza o que o aluno falou em português para inglês automaticamente. Se o áudio for em português, diga que precisa de uma fala em inglês para correção.**
+Finalize mostrando a frase corrigida com clareza, iniciando com: ✅ Frase corrigida:
 """
+
 
 # Função para detectar problemas de pronúncia
 async def analisar_pronuncia(transcricao, audio_path, nivel):
     try:
         # Gera o prompt com base na transcrição
-        user_prompt = gerar_prompt(transcricao)
+        user_prompt = gerar_prompt(transcricao, nivel)
 
         # Chamada à API da OpenAI
-        response = await openai.ChatCompletion.acreate(
-            model="gpt-4",  # ou "gpt-3.5-turbo" se preferir
+        response = await openai_client.chat.completions.create(
+            model="gpt-4",  # ou "gpt-3.5-turbo" se quiser economizar
             messages=[
                 {"role": "system", "content": system_message},
                 {"role": "user", "content": user_prompt}
             ],
             temperature=0.3,
             max_tokens=1000
-        )
+            )
 
         # Retorna o conteúdo da resposta
         return response.choices[0].message.content
 
     except Exception as e:
-        return f"❌ Erro ao processar a análise: {str(e)}"       
+        return f"❌ Erro ao processar a análise: {str(e)}"
     
 
 # Função para recomendar material de estudo baseado nos erros
