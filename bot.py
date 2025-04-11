@@ -1312,7 +1312,7 @@ async def tratar_audio(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     try:
         # Transcrever áudio
-        transcricao = transcrever_audio(mp3_path)
+        transcricao = await transcrever_audio(mp3_path)
         
         # Obter dados do usuário
         perfil = perfil_usuario.get(user_id, {"nivel": "intermediate", "tema_atual": "daily_life"})
