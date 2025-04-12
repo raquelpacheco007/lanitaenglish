@@ -704,7 +704,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Criar sessão do banco de dados
     db = SessionLocal()
     
-    try:
+    try:  # ESTE É O BLOCO TRY QUE PRECISA SER FECHADO CORRETAMENTE
         if escolha == "practice":
             # Mostrar opções de temas
             keyboard = []
@@ -764,7 +764,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             return MENU
 
-elif escolha == "tips":
+        elif escolha == "tips":
             # Gerar dicas personalizadas
             recomendacoes = await recomendar_material(user_id)
             
@@ -827,8 +827,8 @@ elif escolha == "tips":
             # Mostrar histórico de correções
             await exibir_historico(update, context)
             return MENU
-
-elif escolha == "change_level":
+            
+        elif escolha == "change_level":
             # Mudar nível
             keyboard = [
                 [InlineKeyboardButton("👶 Beginner", callback_data="nivel_beginner")],
@@ -891,7 +891,7 @@ elif escolha == "change_level":
             return MENU
         
         return MENU
-    finally:
+    finally:  # ESTE É O BLOCO FINALLY QUE FECHA O TRY INICIAL
         db.close()
 
 # Handlers para o bot
