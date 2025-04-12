@@ -932,6 +932,68 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     return NOME
 
+async def tema_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    
+    user_id = query.from_user.id
+    tema = query.data.split("_")[1]
+    
+    # Guardar o tema escolhido no banco de dados
+    db = SessionLocal()
+    try:
+        # Atualizar/criar perfil com o tema atual
+        perfil = obter_perfil(db, user_id)
+        if perfil:
+            perfil.objetivo = tema  # Usando o campo objetivo para armazenar o tema atual
+            db.commit()
+        else:
+            criar_perfil(db, user_id, objetivo=tema)
+        
+        # Obter nível do usuário
+        nivel = perfil.nivel if perfil else "intermediate"
+        
+        # Registrar a pergunta no banco de dados
+        pergunta = escolher_proxima_pergunta(user_id, tema)
+        registrar_pergunta(db, user_id, pergunta)
+    finally:
+        db.close()
+    
+    # Iniciar a prática
+    tema_nome = TEMAS.get(tema, "Conversation")
+    
+    # Gerar áudio da pergunta
+    caminho_audio = gerar_audio_fala(pergunta, slow=(nivel == "beginner"))
+    
+    with open(caminho_audio, "rb") as audio_file:
+        mensagem = await context.bot.send_voice(chat_id=query.message.chat_id, voice=audio_file)
+    
+    # Salvar a mensagem para posterior tradução
+    if user_id not in ultimas_mensagens:
+        ultimas_mensagens[user_id] = {}
+    ultimas_mensagens[user_id][str(mensagem.message_id)] = pergunta
+    
+    # Adicionar botão de tradução
+    keyboard = [
+        [InlineKeyboardButton("🇧🇷 Traduzir para Português", callback_data=f"traducao_{mensagem.message_id}")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await context.bot.edit_message_reply_markup(
+        chat_id=query.message.chat_id,
+        message_id=mensagem.message_id,
+        reply_markup=reply_markup
+    )
+    
+    await query.edit_message_text(
+        f"🎙️ Vamos praticar {tema_nome}!\n\n"
+        f"Vou fazer perguntas sobre este tópico. Responda com uma mensagem de voz para praticar a fala.\n\n"
+        f"Tente responder por áudio, se não conseguir você também pode enviar em texto. Não se preocupe se errar, estou aqui para ajudar você a evoluir!🧸❤️\n\n"
+        f"💬 {pergunta}"
+    )
+    
+    return ConversationHandler.END
+
 # NOVO! Função para exibir o menu principal (o comando /menu)
 async def comando_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
