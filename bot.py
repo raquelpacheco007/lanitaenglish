@@ -65,9 +65,32 @@ MAKE_WEBHOOK_URL = "https://hook.us2.make.com/oc44mwkxo2jx2x08o9shgrxjcn8a72gr"
 
 CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSQqQxElIhtdIiFYWPlz6SSXH6UUcsHqFxLWi_fhmv-h4-SM8Q7KB8M2DCooYTZRZU0pLNcfNAyzsQN/pub?gid=0&single=true&output=csv'
 
-# Configuração de logs
-logging.basicConfig(level=logging.INFO, 
-                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+# Configuração de logs para debug
+def setup_logging():
+    """Configura logging avançado para debugging"""
+    log_dir = "logs"
+    os.makedirs(log_dir, exist_ok=True)
+    
+    log_file = os.path.join(log_dir, f"bot_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log")
+    
+    # Configuração de logs mais detalhada
+    logging.basicConfig(
+        level=logging.DEBUG,  # Nível DEBUG para capturar tudo
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.StreamHandler(),  # Para console
+            logging.FileHandler(log_file)  # Para arquivo
+        ]
+    )
+    
+    # Reduzir o nível de log de bibliotecas muito verbosas
+    logging.getLogger('httpx').setLevel(logging.WARNING)
+    logging.getLogger('telegram').setLevel(logging.INFO)
+    
+    logging.info(f"Logs configurados, salvando em: {log_file}")
+
+# Inicializar o logger
+setup_logging()
 
 # Estados de conversa
 NOME, NIVEL, MENU, TEMA, TRADUCAO = range(5)
@@ -404,7 +427,7 @@ Finalize com:
 "Por favor, envie um áudio em inglês para que eu possa analisar sua fala."
 
 ⚠️ Muito importante: 
-Nunca inclua frases genéricas ou exemplos externos como “Student sentence: ...” ou “Your response: ...”.
+Nunca inclua frases genéricas ou exemplos externos como "Student sentence: ..." ou "Your response: ...".
 Corrija **somente** a frase do aluno, sem comparações ou exemplos adicionais.
 
 Seja clara, encorajadora e objetiva e envie a Frase corrigida somente uma vez no final.
@@ -450,7 +473,7 @@ async def analisar_pronuncia(transcricao, audio_path, nivel):
 
     except Exception as e:
         return f"❌ Erro ao processar a análise: {str(e)}"
-    
+
 # Função para recomendar material de estudo baseado nos erros
 async def recomendar_material(user_id):
     # Buscar histórico de erros no banco de dados
@@ -550,7 +573,10 @@ def escolher_proxima_pergunta(user_id, tema=None):
 # Função para processar os botões de tradução
 async def traduzir_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    await query.answer()
+    try:
+        await query.answer()
+    except Exception as e:
+        logging.error(f"Erro ao responder callback query no traduzir_handler: {e}")
     
     partes = query.data.split("_")
     if len(partes) >= 2 and partes[0] == "traducao":
@@ -697,9 +723,17 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = query.from_user.id
     escolha = query.data
     
+    logging.info(f"menu_handler chamado com escolha: {escolha}")
+    
     # Verificar se é uma seleção de nível
     if escolha.startswith("nivel_"):
+        logging.info(f"Redirecionando para nivel_handler com escolha: {escolha}")
         return await nivel_handler(update, context)
+    
+    # Verificar se é uma seleção de tema
+    if escolha.startswith("tema_"):
+        logging.info(f"Redirecionando para tema_handler com escolha: {escolha}")
+        return await tema_handler(update, context)
     
     # Criar sessão do banco de dados
     db = SessionLocal()
@@ -725,6 +759,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 reply_markup=reply_markup
             )
             
+            logging.info(f"Usuário {user_id} escolheu practice, mostrando opções de tema")
             return TEMA
 
         elif escolha == "progress":
@@ -853,6 +888,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             estagio_usuario[user_id] = NOME
             return NOME
         
+        logging.warning(f"Escolha não reconhecida no menu: {escolha}")
         return MENU
     finally:
         db.close()
@@ -1013,14 +1049,23 @@ async def nome_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     return NIVEL
 
-# No início de nivel_handler
 async def nivel_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logging.info("Entrando em nivel_handler")
     query = update.callback_query
-    await query.answer()
+    try:
+        await query.answer()
+    except Exception as e:
+        logging.error(f"Erro ao responder callback query no nivel_handler: {e}")
         
     user_id = query.from_user.id
-    nivel = query.data.split("_")[1]
+    callback_data = query.data
+    
+    if not callback_data.startswith("nivel_"):
+        logging.error(f"nivel_handler recebeu callback inválido: {callback_data}")
+        return MENU
+    
+    nivel = callback_data.split("_")[1]
+    logging.info(f"Nível selecionado: {nivel}")
     
     # Guardar o nível no banco de dados
     db = SessionLocal()
@@ -1063,6 +1108,105 @@ async def nivel_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     
     return MENU
+
+async def tema_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    
+    try:
+        await query.answer()
+    except Exception as e:
+        logging.error(f"Erro ao responder callback query no tema_handler: {e}")
+    
+    user_id = query.from_user.id
+    callback_data = query.data
+    
+    logging.info(f"tema_handler chamado com callback_data: {callback_data}")
+    
+    # Verificar se a callback começa com tema_
+    if not callback_data.startswith("tema_"):
+        logging.error(f"tema_handler recebeu callback inválido: {callback_data}")
+        return MENU
+    
+    tema = callback_data.split("_")[1]
+    logging.info(f"Tema selecionado: {tema}")
+    
+    # Guardar o tema escolhido no banco de dados
+    db = SessionLocal()
+    try:
+        # Atualizar/criar perfil com o tema atual
+        perfil = obter_perfil(db, user_id)
+        if perfil:
+            perfil.objetivo = tema  # Usando o campo objetivo para armazenar o tema atual
+            db.commit()
+        else:
+            criar_perfil(db, user_id, objetivo=tema)
+        
+        # Obter nível do usuário
+        nivel = perfil.nivel if perfil else "intermediate"
+        
+        # Escolher pergunta para o tema
+        try:
+            pergunta = escolher_proxima_pergunta(user_id, tema)
+            logging.info(f"Pergunta escolhida: {pergunta}")
+            # Registrar a pergunta no banco de dados
+            registrar_pergunta(db, user_id, pergunta)
+        except Exception as e:
+            logging.error(f"Erro ao escolher/registrar pergunta: {e}")
+            pergunta = "What do you think about this topic?"
+    finally:
+        db.close()
+    
+    # Iniciar a prática
+    tema_nome = TEMAS.get(tema, "Conversation")
+    
+    try:
+        # Gerar áudio da pergunta
+        caminho_audio = gerar_audio_fala(pergunta, slow=(nivel == "beginner"))
+        
+        with open(caminho_audio, "rb") as audio_file:
+            mensagem = await context.bot.send_voice(chat_id=query.message.chat_id, voice=audio_file)
+        
+        # Salvar a mensagem para posterior tradução
+        if user_id not in ultimas_mensagens:
+            ultimas_mensagens[user_id] = {}
+        ultimas_mensagens[user_id][str(mensagem.message_id)] = pergunta
+        
+        # Adicionar botão de tradução
+        keyboard = [
+            [InlineKeyboardButton("🇧🇷 Traduzir para Português", callback_data=f"traducao_{mensagem.message_id}")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await context.bot.edit_message_reply_markup(
+            chat_id=query.message.chat_id,
+            message_id=mensagem.message_id,
+            reply_markup=reply_markup
+        )
+        
+        await query.edit_message_text(
+            f"🎙️ Vamos praticar {tema_nome}!\n\n"
+            f"Vou fazer perguntas sobre este tópico. Responda com uma mensagem de voz para praticar a fala.\n\n"
+            f"Tente responder por áudio, se não conseguir você também pode enviar em texto. Não se preocupe se errar, estou aqui para ajudar você a evoluir!🧸❤️\n\n"
+            f"💬 {pergunta}"
+        )
+        
+        # Limpar arquivo temporário
+        try:
+            os.remove(caminho_audio)
+        except Exception as e:
+            logging.error(f"Erro ao remover arquivo temporário: {e}")
+            pass
+            
+        logging.info(f"Tema configurado com sucesso para o usuário {user_id}")
+        # IMPORTANTE: Não finalizamos a conversa
+        return MENU
+        
+    except Exception as e:
+        logging.error(f"Erro ao processar tema: {e}")
+        await query.edit_message_text(
+            f"Desculpe, tive um problema ao configurar o tema. Por favor, tente novamente ou escolha outro tema."
+        )
+        return MENU
 
 # Função para ativar premium com código
 async def comando_ativar(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1350,70 +1494,6 @@ async def comando_tema(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     return TEMA
 
-async def tema_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    
-    user_id = query.from_user.id
-    tema = query.data.split("_")[1]
-    
-    # Guardar o tema escolhido no banco de dados
-    db = SessionLocal()
-    try:
-        # Atualizar/criar perfil com o tema atual
-        perfil = obter_perfil(db, user_id)
-        if perfil:
-            perfil.objetivo = tema  # Usando o campo objetivo para armazenar o tema atual
-            db.commit()
-        else:
-            criar_perfil(db, user_id, objetivo=tema)
-        
-        # Obter nível do usuário
-        nivel = perfil.nivel if perfil else "intermediate"
-        
-        # Registrar a pergunta no banco de dados
-        pergunta = escolher_proxima_pergunta(user_id, tema)
-        registrar_pergunta(db, user_id, pergunta)
-    finally:
-        db.close()
-    
-    # Iniciar a prática
-    tema_nome = TEMAS.get(tema, "Conversation")
-    
-    # Gerar áudio da pergunta
-    caminho_audio = gerar_audio_fala(pergunta, slow=(nivel == "beginner"))
-    
-    with open(caminho_audio, "rb") as audio_file:
-        mensagem = await context.bot.send_voice(chat_id=query.message.chat_id, voice=audio_file)
-    
-    # Salvar a mensagem para posterior tradução
-    if user_id not in ultimas_mensagens:
-        ultimas_mensagens[user_id] = {}
-    ultimas_mensagens[user_id][str(mensagem.message_id)] = pergunta
-    
-    # Adicionar botão de tradução
-    keyboard = [
-        [InlineKeyboardButton("🇧🇷 Traduzir para Português", callback_data=f"traducao_{mensagem.message_id}")]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    await context.bot.edit_message_reply_markup(
-        chat_id=query.message.chat_id,
-        message_id=mensagem.message_id,
-        reply_markup=reply_markup
-    )
-    
-    await query.edit_message_text(
-        f"🎙️ Vamos praticar {tema_nome}!\n\n"
-        f"Vou fazer perguntas sobre este tópico. Responda com uma mensagem de voz para praticar a fala.\n\n"
-        f"Tente responder por áudio, se não conseguir você também pode enviar em texto. Não se preocupe se errar, estou aqui para ajudar você a evoluir!🧸❤️\n\n"
-        f"💬 {pergunta}"
-    )
-    
-    # MODIFICADO: Não finalizar a conversa, retornar para o estado MENU
-    return MENU
-
-
 async def comando_pergunta(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     
@@ -1513,6 +1593,23 @@ async def comando_ajuda(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     
     await update.message.reply_text(help_text, parse_mode='Markdown')
+
+# Handler para debug de callbacks não tratados
+async def debug_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handler genérico para debug de callbacks não capturados"""
+    query = update.callback_query
+    user_id = query.from_user.id
+    callback_data = query.data
+    
+    logging.warning(f"Callback não tratado: {callback_data} do usuário {user_id}")
+    
+    # Não bloqueia o usuário, apenas responde
+    try:
+        await query.answer("Esta opção não está disponível no momento.")
+    except Exception as e:
+        logging.error(f"Erro ao responder callback não tratado: {e}")
+    
+    return ConversationHandler.END
 
 # Handler para mensagens de texto
 async def tratar_texto(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1881,26 +1978,39 @@ def main():
         except Exception as e:
             logging.error(f"Erro ao configurar job_queue: {e}")
     
-    # Adicionar handlers de conversa
+    # Adicionar handlers de conversa com a ordem correta
     conv_handler = ConversationHandler(
-    entry_points=[
-        CommandHandler("start", start),
-        CommandHandler("menu", comando_menu)
-    ],
-    states={
-        NOME: [MessageHandler(filters.TEXT & ~filters.COMMAND, nome_handler)],
-        NIVEL: [CallbackQueryHandler(nivel_handler, pattern="^nivel_")],
-        MENU: [
-            CallbackQueryHandler(tema_handler, pattern="^tema_"),
-            CallbackQueryHandler(menu_handler)  # Este precisa estar DEPOIS dos handlers específicos
+        entry_points=[
+            CommandHandler("start", start),
+            CommandHandler("menu", comando_menu)
         ],
-        TEMA: [CallbackQueryHandler(tema_handler, pattern="^tema_")]
-    },
-    fallbacks=[
-        CommandHandler("start", start),
-        CommandHandler("cancel", cancelar)
-    ]
-)
+        states={
+            NOME: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, nome_handler)
+            ],
+            NIVEL: [
+                CallbackQueryHandler(nivel_handler, pattern="^nivel_")
+            ],
+            MENU: [
+                # Ordem é importante: padrões específicos primeiro
+                CallbackQueryHandler(tema_handler, pattern="^tema_"),
+                CallbackQueryHandler(nivel_handler, pattern="^nivel_"),
+                CallbackQueryHandler(menu_handler)  # Handler genérico por último
+            ],
+            TEMA: [
+                CallbackQueryHandler(tema_handler, pattern="^tema_"),
+                CallbackQueryHandler(menu_handler)  # Fallback para voltar ao menu
+            ]
+        },
+        fallbacks=[
+            CommandHandler("start", start),
+            CommandHandler("cancel", cancelar),
+            # Adicionamos o comando menu como fallback também
+            CommandHandler("menu", comando_menu)
+        ],
+        # Adicionamos uma função de timeout para prevenir estados zumbis
+        conversation_timeout=timedelta(minutes=30)
+    )
     
     application.add_handler(conv_handler)
     
@@ -1929,11 +2039,8 @@ def main():
     # Adicionar handler para callback queries para tradução
     application.add_handler(CallbackQueryHandler(traduzir_handler, pattern="^traducao_|^original_"))
     
-    # Adicionar handler para callback queries dos temas
-    application.add_handler(CallbackQueryHandler(tema_handler, pattern="^tema_"))
-    
-    # Handler genérico para outros callback queries
-    application.add_handler(CallbackQueryHandler(menu_handler))
+    # Handler de fallback para qualquer callback não tratado (deve ser o último)
+    application.add_handler(CallbackQueryHandler(debug_callback_query))
     
     # Configurar e iniciar o webhook
     if WEBHOOK_URL:
