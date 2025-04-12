@@ -692,15 +692,14 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         await query.answer()
     except Exception as e:
-        # Se não conseguir responder ao callback query, apenas registrar o erro e continuar
         logging.error(f"Erro ao responder callback query: {e}")
     
     user_id = query.from_user.id
     escolha = query.data
     
-    # Garantir que o usuário não está em nenhum estágio de cadastro
-    if user_id in estagio_usuario:
-        del estagio_usuario[user_id]
+    # Verificar se é uma seleção de nível
+    if escolha.startswith("nivel_"):
+        return await nivel_handler(update, context)
     
     # Criar sessão do banco de dados
     db = SessionLocal()
@@ -861,6 +860,10 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def comando_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     
+    # Limpar qualquer estado anterior do usuário
+    if user_id in estagio_usuario:
+        del estagio_usuario[user_id]
+    
     # Criar sessão do banco de dados
     db = SessionLocal()
     
@@ -1010,10 +1013,12 @@ async def nome_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     return NIVEL
 
+# No início de nivel_handler
 async def nivel_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logging.info("Entrando em nivel_handler")
     query = update.callback_query
     await query.answer()
-    
+        
     user_id = query.from_user.id
     nivel = query.data.split("_")[1]
     
@@ -1876,15 +1881,25 @@ def main():
     
     # Adicionar handlers de conversa
     conv_handler = ConversationHandler(
-        entry_points=[CommandHandler("start", start)],
-        states={
-            NOME: [MessageHandler(filters.TEXT & ~filters.COMMAND, nome_handler)],
-            NIVEL: [CallbackQueryHandler(nivel_handler, pattern="^nivel_")],
-            MENU: [CallbackQueryHandler(menu_handler)],
-            TEMA: [CallbackQueryHandler(tema_handler, pattern="^tema_")]
-        },
-        fallbacks=[CommandHandler("start", start)]
-    )
+    entry_points=[
+        CommandHandler("start", start),
+        CommandHandler("menu", comando_menu)  # Adicionar /menu como ponto de entrada
+    ],
+    states={
+        NOME: [MessageHandler(filters.TEXT & ~filters.COMMAND, nome_handler)],
+        NIVEL: [CallbackQueryHandler(nivel_handler, pattern="^nivel_")],
+        MENU: [
+            CallbackQueryHandler(menu_handler),
+            # Adicionar handlers específicos para cada tipo de callback
+            CallbackQueryHandler(nivel_handler, pattern="^nivel_") 
+        ],
+        TEMA: [CallbackQueryHandler(tema_handler, pattern="^tema_")]
+    },
+    fallbacks=[
+        CommandHandler("start", start),
+        CommandHandler("cancel", cancelar)
+    ]
+)
     
     application.add_handler(conv_handler)
     
