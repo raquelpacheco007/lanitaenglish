@@ -924,7 +924,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "• /menu - Acessa o menu principal\n"
         "• /reset - Reseta seus dados\n"
         "• /cancel - Cancela o fluxo atual\n"
-        "• /help - Mostra esta mensagem de ajuda\n"?
+        "• /help - Mostra esta mensagem de ajuda\n"
         "• /theme - Altera o tema da conversa\n"
         "• /question - Novo tópico de conversa\n\n"
         
@@ -1486,7 +1486,7 @@ async def comando_ajuda(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "• /menu - Acessa o menu principal\n"
         "• /reset - Reseta seus dados\n"
         "• /cancel - Cancela o fluxo atual\n"
-        "• /help - Mostra esta mensagem de ajuda\n"?
+        "• /help - Mostra esta mensagem de ajuda\n"
         "• /theme - Altera o tema da conversa\n"
         "• /question - Novo tópico de conversa\n\n"
         
