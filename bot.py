@@ -1410,7 +1410,9 @@ async def tema_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"💬 {pergunta}"
     )
     
-    return ConversationHandler.END
+    # MODIFICADO: Não finalizar a conversa, retornar para o estado MENU
+    return MENU
+
 
 async def comando_pergunta(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -1883,15 +1885,14 @@ def main():
     conv_handler = ConversationHandler(
     entry_points=[
         CommandHandler("start", start),
-        CommandHandler("menu", comando_menu)  # Adicionar /menu como ponto de entrada
+        CommandHandler("menu", comando_menu)
     ],
     states={
         NOME: [MessageHandler(filters.TEXT & ~filters.COMMAND, nome_handler)],
         NIVEL: [CallbackQueryHandler(nivel_handler, pattern="^nivel_")],
         MENU: [
-            CallbackQueryHandler(menu_handler),
-            # Adicionar handlers específicos para cada tipo de callback
-            CallbackQueryHandler(nivel_handler, pattern="^nivel_") 
+            CallbackQueryHandler(tema_handler, pattern="^tema_"),
+            CallbackQueryHandler(menu_handler)  # Este precisa estar DEPOIS dos handlers específicos
         ],
         TEMA: [CallbackQueryHandler(tema_handler, pattern="^tema_")]
     },
