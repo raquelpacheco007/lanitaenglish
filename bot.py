@@ -1125,86 +1125,122 @@ async def tema_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Verificar se a callback começa com tema_
     if not callback_data.startswith("tema_"):
         logging.error(f"tema_handler recebeu callback inválido: {callback_data}")
+        await query.edit_message_text(
+            "Ocorreu um erro ao processar sua escolha. Por favor, tente novamente."
+        )
         return MENU
     
-    tema = callback_data.split("_")[1]
-    logging.info(f"Tema selecionado: {tema}")
-    
-    # Guardar o tema escolhido no banco de dados
-    db = SessionLocal()
     try:
-        # Atualizar/criar perfil com o tema atual
-        perfil = obter_perfil(db, user_id)
-        if perfil:
-            perfil.objetivo = tema  # Usando o campo objetivo para armazenar o tema atual
-            db.commit()
-        else:
-            criar_perfil(db, user_id, objetivo=tema)
+        tema = callback_data.split("_")[1]
+        logging.info(f"Tema selecionado: {tema}")
         
-        # Obter nível do usuário
-        nivel = perfil.nivel if perfil else "intermediate"
+        # Verificar se o tema existe
+        if tema not in TEMAS:
+            logging.error(f"Tema não encontrado: {tema}")
+            await query.edit_message_text(
+                "Este tema não está disponível no momento. Por favor, escolha outro tema."
+            )
+            return MENU
         
-        # Escolher pergunta para o tema
+        # Guardar o tema escolhido no banco de dados
+        db = SessionLocal()
         try:
-            pergunta = escolher_proxima_pergunta(user_id, tema)
-            logging.info(f"Pergunta escolhida: {pergunta}")
-            # Registrar a pergunta no banco de dados
-            registrar_pergunta(db, user_id, pergunta)
-        except Exception as e:
-            logging.error(f"Erro ao escolher/registrar pergunta: {e}")
-            pergunta = "What do you think about this topic?"
-    finally:
-        db.close()
-    
-    # Iniciar a prática
-    tema_nome = TEMAS.get(tema, "Conversation")
-    
-    try:
-        # Gerar áudio da pergunta
-        caminho_audio = gerar_audio_fala(pergunta, slow=(nivel == "beginner"))
-        
-        with open(caminho_audio, "rb") as audio_file:
-            mensagem = await context.bot.send_voice(chat_id=query.message.chat_id, voice=audio_file)
-        
-        # Salvar a mensagem para posterior tradução
-        if user_id not in ultimas_mensagens:
-            ultimas_mensagens[user_id] = {}
-        ultimas_mensagens[user_id][str(mensagem.message_id)] = pergunta
-        
-        # Adicionar botão de tradução
-        keyboard = [
-            [InlineKeyboardButton("🇧🇷 Traduzir para Português", callback_data=f"traducao_{mensagem.message_id}")]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        await context.bot.edit_message_reply_markup(
-            chat_id=query.message.chat_id,
-            message_id=mensagem.message_id,
-            reply_markup=reply_markup
-        )
-        
-        await query.edit_message_text(
-            f"🎙️ Vamos praticar {tema_nome}!\n\n"
-            f"Vou fazer perguntas sobre este tópico. Responda com uma mensagem de voz para praticar a fala.\n\n"
-            f"Tente responder por áudio, se não conseguir você também pode enviar em texto. Não se preocupe se errar, estou aqui para ajudar você a evoluir!🧸❤️\n\n"
-            f"💬 {pergunta}"
-        )
-        
-        # Limpar arquivo temporário
-        try:
-            os.remove(caminho_audio)
-        except Exception as e:
-            logging.error(f"Erro ao remover arquivo temporário: {e}")
-            pass
+            # Atualizar/criar perfil com o tema atual
+            perfil = obter_perfil(db, user_id)
+            if perfil:
+                perfil.objetivo = tema  # Usando o campo objetivo para armazenar o tema atual
+                db.commit()
+            else:
+                criar_perfil(db, user_id, objetivo=tema)
             
-        logging.info(f"Tema configurado com sucesso para o usuário {user_id}")
-        # IMPORTANTE: Não finalizamos a conversa
-        return MENU
-        
+            # Obter nível do usuário
+            nivel = perfil.nivel if perfil else "intermediate"
+            
+            # Escolher pergunta para o tema
+            pergunta = escolher_proxima_pergunta(user_id, tema)
+            
+            # Iniciar a prática
+            tema_nome = TEMAS.get(tema, "Conversation")
+            
+            # Primeira atualização do texto antes de processar áudio para feedback imediato
+            await query.edit_message_text(
+                f"🎙️ Preparando tema: {tema_nome}...\nPor favor, aguarde."
+            )
+            
+            # Gerar áudio da pergunta
+            try:
+                caminho_audio = gerar_audio_fala(pergunta, slow=(nivel == "beginner"))
+            except Exception as audio_error:
+                logging.error(f"Erro ao gerar áudio: {audio_error}")
+                await query.edit_message_text(
+                    f"🎙️ Vamos praticar {tema_nome}!\n\n"
+                    f"💬 {pergunta}\n\n"
+                    f"Responda com texto ou áudio para praticar."
+                )
+                return MENU
+            
+            # Enviando o áudio
+            try:
+                with open(caminho_audio, "rb") as audio_file:
+                    mensagem = await context.bot.send_voice(chat_id=query.message.chat_id, voice=audio_file)
+                
+                # Salvar a mensagem para posterior tradução
+                if user_id not in ultimas_mensagens:
+                    ultimas_mensagens[user_id] = {}
+                ultimas_mensagens[user_id][str(mensagem.message_id)] = pergunta
+                
+                # Adicionar botão de tradução
+                keyboard = [
+                    [InlineKeyboardButton("🇧🇷 Traduzir para Português", callback_data=f"traducao_{mensagem.message_id}")]
+                ]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                
+                await context.bot.edit_message_reply_markup(
+                    chat_id=query.message.chat_id,
+                    message_id=mensagem.message_id,
+                    reply_markup=reply_markup
+                )
+                
+                # Atualizar a mensagem original
+                await query.edit_message_text(
+                    f"🎙️ Vamos praticar {tema_nome}!\n\n"
+                    f"Vou fazer perguntas sobre este tópico. Responda com uma mensagem de voz para praticar a fala.\n\n"
+                    f"Tente responder por áudio, se não conseguir você também pode enviar em texto. Não se preocupe se errar, estou aqui para ajudar você a evoluir!🧸❤️\n\n"
+                    f"💬 {pergunta}"
+                )
+                
+            except Exception as send_error:
+                logging.error(f"Erro ao enviar áudio: {send_error}")
+                await query.edit_message_text(
+                    f"🎙️ Vamos praticar {tema_nome}!\n\n"
+                    f"💬 {pergunta}\n\n"
+                    f"Responda com texto ou áudio para praticar."
+                )
+            
+            # Limpar arquivo temporário
+            try:
+                os.remove(caminho_audio)
+            except Exception as e:
+                logging.error(f"Erro ao remover arquivo temporário: {e}")
+            
+            logging.info(f"Tema configurado com sucesso para o usuário {user_id}")
+            return MENU
+            
+        except Exception as db_error:
+            logging.error(f"Erro de banco de dados: {db_error}")
+            # Se houver um erro no banco, ainda tentamos mostrar uma pergunta
+            await query.edit_message_text(
+                f"Vamos praticar {TEMAS.get(tema, 'Conversation')}!\n\n"
+                f"Por favor, me conte algo sobre este tema."
+            )
+            return MENU
+        finally:
+            db.close()
+            
     except Exception as e:
-        logging.error(f"Erro ao processar tema: {e}")
+        logging.error(f"Erro geral no processamento do tema: {e}")
         await query.edit_message_text(
-            f"Desculpe, tive um problema ao configurar o tema. Por favor, tente novamente ou escolha outro tema."
+            "Desculpe, tive um problema ao configurar o tema. Por favor, tente novamente ou escolha outro tema."
         )
         return MENU
 
