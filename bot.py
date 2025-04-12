@@ -858,6 +858,47 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     finally:
         db.close()
 
+async def comando_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    
+    # Criar sessão do banco de dados
+    db = SessionLocal()
+    
+    try:
+        # Obter informações do usuário
+        usuario = obter_usuario(db, user_id)
+        perfil = obter_perfil(db, user_id)
+        
+        # Verificar se o usuário está cadastrado
+        if not usuario:
+            await update.message.reply_text(
+                "Parece que você ainda não se cadastrou. Vamos começar?\n\n"
+                "Por favor, use o comando /start para iniciar o cadastro."
+            )
+            return ConversationHandler.END
+        
+        nome = usuario.nome if usuario else "there"
+        nivel = perfil.nivel if perfil and perfil.nivel else "intermediate"
+        
+        # Mostrar o menu principal
+        keyboard = [
+            [InlineKeyboardButton("🎯 Start Practice", callback_data="practice")],
+            [InlineKeyboardButton("📊 My Progress", callback_data="progress")],
+            [InlineKeyboardButton("📚 Study Tips", callback_data="tips")],
+            [InlineKeyboardButton("🔄 Change Settings", callback_data="settings")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(
+            f"Olá, {nome}! O que você gostaria de fazer?\n\n"
+            f"Seu nível atual: {nivel}",
+            reply_markup=reply_markup
+        )
+        
+        return MENU
+    finally:
+        db.close()
+
 # Handlers para o bot
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -880,9 +921,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
          "Aqui são alguns Comandos pra você interagir:\n\n"
         "🧸 Comandos Básicos:\n"
         "• /start - Inicia ou reinicia o bot\n"
+        "• /menu - Acessa o menu principal\n"
         "• /reset - Reseta seus dados\n"
         "• /cancel - Cancela o fluxo atual\n"
-        "• /help - Mostra esta mensagem de ajuda\n"
+        "• /help - Mostra esta mensagem de ajuda\n"?
         "• /theme - Altera o tema da conversa\n"
         "• /question - Novo tópico de conversa\n\n"
         
@@ -1438,18 +1480,21 @@ async def comando_pergunta(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def comando_ajuda(update: Update, context: ContextTypes.DEFAULT_TYPE):
     help_text = (
         "🌟 **Lana English Practice Bot Help** 🌟\n\n"
-        "Here's how you can interact with me:\n\n"
-        "**Basic Commands:**\n"
-        "• /start - Start or restart the bot\n"
-        "• /help - Show this help message\n"
-        "• /theme - Change conversation theme\n"
-        "• /question - Get a new conversation prompt\n"
-        "• /ativar [código] - Activate your premium subscription\n\n"
+        "Aqui são alguns Comandos pra você interagir:\n\n"
+        "🧸 Comandos Básicos:\n"
+        "• /start - Inicia ou reinicia o bot\n"
+        "• /menu - Acessa o menu principal\n"
+        "• /reset - Reseta seus dados\n"
+        "• /cancel - Cancela o fluxo atual\n"
+        "• /help - Mostra esta mensagem de ajuda\n"?
+        "• /theme - Altera o tema da conversa\n"
+        "• /question - Novo tópico de conversa\n\n"
         
-        "**Advanced Commands:**\n"
-        "• /progress - View your learning progress\n"
-        "• /history - See your correction history\n"
-        "• /tips - Get personalized study recommendations\n\n"
+        "🧸 Comandos Avançados:\n"
+        "• /progress -Progresso de aprendizagem\n"
+        "• /history - Histórico de correções\n"
+        "• /tips - Recomendações de estudo\n"
+        "• /ativar [código] - Ativa sua assinatura premium\n\n"
         
         "**How to Practice:**\n"
         "1. Send me voice messages to practice speaking\n"
@@ -1855,6 +1900,7 @@ def main():
     application.add_handler(CommandHandler("graph", comando_grafico))
     application.add_handler(CommandHandler("cancel", cancelar))
     application.add_handler(CommandHandler("reset", resetar))
+    application.add_handler(CommandHandler("menu", comando_menu))
     application.add_handler(CommandHandler("ativar", comando_ativar))
     application.add_handler(CommandHandler("status", comando_status))
     application.add_handler(CommandHandler("resetarquel", resetarquel))
