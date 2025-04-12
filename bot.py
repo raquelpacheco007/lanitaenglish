@@ -14,6 +14,8 @@ from openai import OpenAI
 import matplotlib.pyplot as plt
 import numpy as np
 import requests
+import hashlib
+import time
 import csv
 import io
 from io import StringIO
