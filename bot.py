@@ -287,7 +287,6 @@ def ogg_para_mp3(ogg_path):
     AudioSegment.from_ogg(ogg_path).export(mp3_path, format="mp3")
     return mp3_path
 
-# Função para corrigir texto com base no nível
 async def corrigir_texto_por_partes(texto, nivel):
     frases = re.split(r'[.!?\n]', texto)
     frases = [f.strip() for f in frases if f.strip()]
@@ -336,7 +335,7 @@ async def corrigir_texto_por_partes(texto, nivel):
                 "Your response:"
             )
 
-try:
+        try:
             resposta = openai_client.chat.completions.create(
                 model="gpt-3.5-turbo",
                 messages=[{"role": "user", "content": prompt}],
