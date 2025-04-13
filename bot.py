@@ -903,7 +903,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 reply_markup=reply_markup
             )
             
-            return NIVEL
+            return MENU
         
         elif escolha == "change_name":
             # Mudar nome
@@ -1087,7 +1087,14 @@ async def nivel_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         # Atualizar/criar perfil
         atualizar_perfil(db, user_id, nivel=nivel)
-        
+        if perfil:
+            perfil.nivel = nivel
+            db.commit()
+            logging.info(f"Nível atualizado para {nivel}")
+        else:
+            criar_perfil(db, user_id, nivel=nivel)
+            logging.info(f"Perfil criado com nível {nivel}")
+
         # Verificar se o usuário tem assinatura premium ativa
         tem_premium = verificar_assinatura_premium(db, user_id)
         
@@ -1936,24 +1943,11 @@ def main():
     # Criar aplicação
     application = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
     
-    # Adicionar handlers de conversa
-    conv_handler = ConversationHandler(
-        entry_points=[CommandHandler("start", start)],
-        states={
-            NOME: [MessageHandler(filters.TEXT & ~filters.COMMAND, nome_handler)],
-            NIVEL: [CallbackQueryHandler(nivel_handler, pattern="^nivel_")],
-            MENU: [CallbackQueryHandler(menu_handler)],
-            TEMA: [CallbackQueryHandler(tema_handler, pattern="^tema_")]
-        },
-        fallbacks=[CommandHandler("start", start)]
-    )
-
-    # Substitua o bloco de código da job_queue em sua função main()
+    # MODIFICADO: Tratar a possível ausência do JobQueue
     if application.job_queue is None:
         logging.warning("JobQueue não está disponível. As verificações automáticas de assinatura serão desativadas.")
     else:
         try:
-            # O problema está aqui. A função time() não deve ser chamada, mas passada como referência
             daily_time = time(hour=10, minute=0, second=0)
             application.job_queue.run_daily(
                 verificar_assinaturas_expiradas,
@@ -1962,6 +1956,24 @@ def main():
             logging.info("Verificação diária de assinaturas agendada com sucesso.")
         except Exception as e:
             logging.error(f"Erro ao configurar job_queue: {e}")
+    
+    # Adicionar handlers de conversa - MODIFIQUE ESTA PARTE
+    conv_handler = ConversationHandler(
+        entry_points=[CommandHandler("start", start)],
+        states={
+            NOME: [MessageHandler(filters.TEXT & ~filters.COMMAND, nome_handler)],
+            NIVEL: [
+                CallbackQueryHandler(nivel_handler, pattern="^nivel_"),
+                # Outros handlers relevantes aqui
+            ],
+            MENU: [
+                CallbackQueryHandler(nivel_handler, pattern="^nivel_"),  # Adicionado aqui também
+                CallbackQueryHandler(menu_handler)
+            ],
+            TEMA: [CallbackQueryHandler(tema_handler, pattern="^tema_")]
+        },
+        fallbacks=[CommandHandler("start", start)]
+    )
     
     application.add_handler(conv_handler)
     
@@ -1989,15 +2001,12 @@ def main():
     
     # Adicionar handler para callback queries para tradução
     application.add_handler(CallbackQueryHandler(traduzir_handler, pattern="^traducao_|^original_"))
-    
-    # Adicionar handler para callback queries dos temas
     application.add_handler(CallbackQueryHandler(tema_handler, pattern="^tema_"))
-    
+    application.add_handler(CallbackQueryHandler(nivel_handler, pattern="^nivel_"))
+
     # Handler genérico para outros callback queries
     application.add_handler(CallbackQueryHandler(menu_handler))
 
-    # Adicione este padrão específico ao seu CallbackQueryHandler
-    application.add_handler(CallbackQueryHandler(nivel_handler, pattern="^nivel_"))
     
     # Configurar e iniciar o webhook
     if WEBHOOK_URL:
