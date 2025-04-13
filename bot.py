@@ -516,7 +516,7 @@ def gerar_audio_fala(texto, slow=True):
                 Text=ssml_texto,
                 TextType='ssml',
                 OutputFormat='mp3',
-                VoiceId='Joanna',
+                VoiceId='Kimberly',
                 Engine='standard'
             )
 
