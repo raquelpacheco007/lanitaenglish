@@ -5,8 +5,9 @@ import tempfile
 import random
 import re
 import json
-from datetime import datetime, timedelta, time as time_obj
-import time as time_module
+from datetime import datetime, timedelta
+from datetime import time as datetime_time
+import time
 from pydub import AudioSegment
 from gtts import gTTS
 from telegram import Update, Voice, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup
@@ -1947,12 +1948,13 @@ def main():
     # Criar aplicação
     application = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
+    # Na função main()
     if application.job_queue is None:
         logging.warning("JobQueue não está disponível. As verificações automáticas de assinatura serão desativadas.")
     else:
         try:
-            # Use time_obj em vez de time
-            daily_time = time_obj(hour=10, minute=0, second=0)  # Usando o time da datetime
+            # Use datetime_time para criar o objeto de tempo
+            daily_time = datetime_time(hour=10, minute=0, second=0)
             application.job_queue.run_daily(
                 verificar_assinaturas_expiradas,
                 time=daily_time
