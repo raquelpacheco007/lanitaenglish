@@ -1974,21 +1974,6 @@ def main():
         },
         fallbacks=[CommandHandler("start", start)]
     )
-
-    # Substitua o bloco de código da job_queue em sua função main()
-    if application.job_queue is None:
-        logging.warning("JobQueue não está disponível. As verificações automáticas de assinatura serão desativadas.")
-    else:
-        try:
-            # O problema está aqui. A função time() não deve ser chamada, mas passada como referência
-            daily_time = time(hour=10, minute=0, second=0)
-            application.job_queue.run_daily(
-                verificar_assinaturas_expiradas,
-                time=daily_time
-            )
-            logging.info("Verificação diária de assinaturas agendada com sucesso.")
-        except Exception as e:
-            logging.error(f"Erro ao configurar job_queue: {e}")
     
     application.add_handler(conv_handler)
     
