@@ -5,7 +5,7 @@ import tempfile
 import random
 import re
 import json
-from datetime import datetime, timedelta, time as datetime_time
+from datetime import datetime, timedelta, time
 from pydub import AudioSegment
 from gtts import gTTS
 from telegram import Update, Voice, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup
@@ -15,6 +15,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import requests
 import hashlib
+import time
 import boto3
 import csv
 import io
@@ -494,12 +495,6 @@ async def recomendar_material(user_id):
 CACHE_DIR = os.path.join(tempfile.gettempdir(), "audio_cache")
 os.makedirs(CACHE_DIR, exist_ok=True)
 
-import hashlib
-import os
-import tempfile
-import logging
-import boto3
-
 def gerar_audio_fala(texto, slow=True):
     try:
         aws_key = os.getenv("AWS_ACCESS_KEY_ID")
@@ -923,7 +918,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 reply_markup=reply_markup
             )
             
-            return MENU
+            return NIVEL
         
         elif escolha == "change_name":
             # Mudar nome
@@ -1001,7 +996,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
          "Aqui são alguns Comandos pra você interagir:\n\n"
         "🧸 Comandos Básicos:\n"
         "• /start - Inicia ou reinicia o bot\n"
-        "• /menu - Acessa o menu principal\n"
         "• /reset - Reseta seus dados\n"
         "• /cancel - Cancela o fluxo atual\n"
         "• /help - Mostra esta mensagem de ajuda\n"
@@ -1092,27 +1086,21 @@ async def nome_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def nivel_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    await query.answer()
-    
+    try:
+        await query.answer()  # Garantir que respondemos ao callback
+    except Exception as e:
+        logging.error(f"Erro ao responder callback query: {e}")
+        
     user_id = query.from_user.id
     nivel = query.data.split("_")[1]
     
-    logging.info(f"Alterando nível para usuário {user_id}: {nivel}")
+    logging.info(f"Alterando nível para usuário {user_id}: {nivel}")  # Log adicional
     
     # Guardar o nível no banco de dados
     db = SessionLocal()
     try:
-        # Obter perfil existente
-        perfil = obter_perfil(db, user_id)
-        
         # Atualizar/criar perfil
-        if perfil:
-            # Atualizar o perfil existente
-            perfil.nivel = nivel
-            db.commit()
-        else:
-            # Criar novo perfil
-            criar_perfil(db, user_id, nivel=nivel)
+        atualizar_perfil(db, user_id, nivel=nivel)
         
         # Verificar se o usuário tem assinatura premium ativa
         tem_premium = verificar_assinatura_premium(db, user_id)
@@ -1123,7 +1111,7 @@ async def nivel_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         # Texto adicional para usuários premium
         texto_premium = ""
-        if tem_premium and usuario and usuario.expiracao:
+        if tem_premium:
             data_expiracao = usuario.expiracao.strftime("%d/%m/%Y")
             texto_premium = f"\n\n🌟 Você tem acesso premium ativo até {data_expiracao}!"
     finally:
@@ -1150,11 +1138,11 @@ async def nivel_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
     except Exception as e:
         logging.error(f"Erro ao editar mensagem: {e}")
-        # Se não for possível editar, tente enviar uma nova mensagem
+        # Tentar enviar uma nova mensagem como fallback
         await context.bot.send_message(
             chat_id=query.message.chat_id,
             text=f"Great, {nome}! I'll adjust my feedback for {nivel} level speakers.{texto_premium}\n\n"
-                "What would you like to do?",
+                 "What would you like to do?",
             reply_markup=reply_markup
         )
     
@@ -1584,7 +1572,6 @@ async def comando_ajuda(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Aqui são alguns Comandos pra você interagir:\n\n"
         "🧸 Comandos Básicos:\n"
         "• /start - Inicia ou reinicia o bot\n"
-        "• /menu - Acessa o menu principal\n"
         "• /reset - Reseta seus dados\n"
         "• /cancel - Cancela o fluxo atual\n"
         "• /help - Mostra esta mensagem de ajuda\n"
@@ -1961,7 +1948,7 @@ def main():
     
     # Criar aplicação
     application = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
-    
+
     if application.job_queue is None:
         logging.warning("JobQueue não está disponível. As verificações automáticas de assinatura serão desativadas.")
     else:
@@ -1976,7 +1963,7 @@ def main():
         except Exception as e:
             logging.error(f"Erro ao configurar job_queue: {e}")
     
-    # Adicionar handlers de conversa - MODIFIQUE ESTA PARTE
+    # Adicionar handlers de conversa
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler("start", start)],
         states={
@@ -1985,11 +1972,27 @@ def main():
             MENU: [CallbackQueryHandler(menu_handler)],
             TEMA: [CallbackQueryHandler(tema_handler, pattern="^tema_")]
         },
-        fallbacks=[CommandHandler("cancel", cancelar)]
+        fallbacks=[CommandHandler("start", start)]
     )
-        
-    # Adicionar comando handlers
+
+    # Substitua o bloco de código da job_queue em sua função main()
+    if application.job_queue is None:
+        logging.warning("JobQueue não está disponível. As verificações automáticas de assinatura serão desativadas.")
+    else:
+        try:
+            # O problema está aqui. A função time() não deve ser chamada, mas passada como referência
+            daily_time = time(hour=10, minute=0, second=0)
+            application.job_queue.run_daily(
+                verificar_assinaturas_expiradas,
+                time=daily_time
+            )
+            logging.info("Verificação diária de assinaturas agendada com sucesso.")
+        except Exception as e:
+            logging.error(f"Erro ao configurar job_queue: {e}")
+    
     application.add_handler(conv_handler)
+    
+    # Adicionar comando handlers
     application.add_handler(CommandHandler("help", comando_ajuda))
     application.add_handler(CommandHandler("theme", comando_tema))
     application.add_handler(CommandHandler("question", comando_pergunta))
@@ -2013,12 +2016,15 @@ def main():
     
     # Adicionar handler para callback queries para tradução
     application.add_handler(CallbackQueryHandler(traduzir_handler, pattern="^traducao_|^original_"))
+    
+    # Adicionar handler para callback queries dos temas
     application.add_handler(CallbackQueryHandler(tema_handler, pattern="^tema_"))
-    application.add_handler(CallbackQueryHandler(nivel_handler, pattern="^nivel_"))
-
+    
     # Handler genérico para outros callback queries
     application.add_handler(CallbackQueryHandler(menu_handler))
 
+    # Adicione este padrão específico ao seu CallbackQueryHandler
+    application.add_handler(CallbackQueryHandler(nivel_handler, pattern="^nivel_"))
     
     # Configurar e iniciar o webhook
     if WEBHOOK_URL:
