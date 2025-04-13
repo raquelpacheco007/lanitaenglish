@@ -510,13 +510,14 @@ def gerar_audio_fala(texto, slow=True):
                 region_name='us-east-1'
             )
             
-            ssml_texto = f"<speak><prosody rate='{'x-slow' if slow else 'medium'}'>{texto}</prosody></speak>"
+            ssml_texto = f"<speak><prosody rate='{'slow' if slow else 'medium'}'>{texto}</prosody></speak>"
 
             response = polly_client.synthesize_speech(
                 Text=ssml_texto,
                 TextType='ssml',
                 OutputFormat='mp3',
-                VoiceId='Joanna'
+                VoiceId='Joanna',
+                Engine='standard'
             )
 
             caminho = tempfile.mktemp(suffix=".mp3")
