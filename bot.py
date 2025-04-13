@@ -1947,7 +1947,7 @@ def main():
     application = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
     if application.job_queue is None:
-    logging.warning("JobQueue não está disponível. As verificações automáticas de assinatura serão desativadas.")
+        logging.warning("JobQueue não está disponível. As verificações automáticas de assinatura serão desativadas.")
     else:
         try:
             # Use datetime_time em vez de time
