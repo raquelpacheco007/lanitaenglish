@@ -1085,42 +1085,40 @@ async def nome_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def nivel_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    try:
-        await query.answer()  # Garantir que respondemos ao callback
-    except Exception as e:
-        logging.error(f"Erro ao responder callback query: {e}")
-        
+    await query.answer()
+    
     user_id = query.from_user.id
     nivel = query.data.split("_")[1]
     
-    logging.info(f"Alterando nível para usuário {user_id}: {nivel}")  # Log adicional
+    logging.info(f"Alterando nível para usuário {user_id}: {nivel}")
     
-    # Guardar o nível no banco de dados
+    # Criar uma sessão do banco de dados
     db = SessionLocal()
     try:
-        # Atualizar/criar perfil
-        atualizar_perfil(db, user_id, nivel=nivel)
+        # Atualizar perfil com o novo nível
+        perfil = obter_perfil(db, user_id)
+        if perfil:
+            perfil.nivel = nivel
+            db.commit()
+        else:
+            criar_perfil(db, user_id, nivel=nivel)
         
-        # Verificar se o usuário tem assinatura premium ativa
+        # Verificar se o usuário tem assinatura premium
         tem_premium = verificar_assinatura_premium(db, user_id)
         
         # Buscar nome do usuário
         usuario = obter_usuario(db, user_id)
         nome = usuario.nome if usuario else "there"
         
-        # Texto adicional para usuários premium
+        # Texto para premium
         texto_premium = ""
-        if tem_premium:
+        if tem_premium and usuario and usuario.expiracao:
             data_expiracao = usuario.expiracao.strftime("%d/%m/%Y")
             texto_premium = f"\n\n🌟 Você tem acesso premium ativo até {data_expiracao}!"
     finally:
         db.close()
     
-    # Garantir que o usuário não está mais no estágio de cadastro
-    if user_id in estagio_usuario:
-        del estagio_usuario[user_id]
-    
-    # Mostrar o menu principal
+    # Mostrar menu principal
     keyboard = [
         [InlineKeyboardButton("🎯 Start Practice", callback_data="practice")],
         [InlineKeyboardButton("📊 My Progress", callback_data="progress")],
@@ -1136,12 +1134,12 @@ async def nivel_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=reply_markup
         )
     except Exception as e:
-        logging.error(f"Erro ao editar mensagem: {e}")
-        # Tentar enviar uma nova mensagem como fallback
+        logging.error(f"Erro ao editar mensagem após mudança de nível: {e}")
+        # Enviar nova mensagem se não conseguir editar
         await context.bot.send_message(
             chat_id=query.message.chat_id,
             text=f"Great, {nome}! I'll adjust my feedback for {nivel} level speakers.{texto_premium}\n\n"
-                 "What would you like to do?",
+                "What would you like to do?",
             reply_markup=reply_markup
         )
     
