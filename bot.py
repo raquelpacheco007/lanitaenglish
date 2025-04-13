@@ -1953,7 +1953,6 @@ def main():
         logging.warning("JobQueue não está disponível. As verificações automáticas de assinatura serão desativadas.")
     else:
         try:
-            # Use datetime_time para criar o objeto de tempo
             daily_time = datetime_time(hour=10, minute=0, second=0)
             application.job_queue.run_daily(
                 verificar_assinaturas_expiradas,
@@ -1962,6 +1961,7 @@ def main():
             logging.info("Verificação diária de assinaturas agendada com sucesso.")
         except Exception as e:
             logging.error(f"Erro ao configurar job_queue: {e}")
+
     
     # Adicionar handlers de conversa
     conv_handler = ConversationHandler(
