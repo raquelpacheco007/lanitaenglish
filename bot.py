@@ -5,7 +5,7 @@ import tempfile
 import random
 import re
 import json
-from datetime import datetime, timedelta, time as datetime_time
+from datetime import time as datetime_time
 from pydub import AudioSegment
 from gtts import gTTS
 from telegram import Update, Voice, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup
