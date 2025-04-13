@@ -5,7 +5,7 @@ import tempfile
 import random
 import re
 import json
-from datetime import datetime, timedelta, time
+from datetime import datetime, timedelta, time as datetime_time
 from pydub import AudioSegment
 from gtts import gTTS
 from telegram import Update, Voice, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup
@@ -15,7 +15,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import requests
 import hashlib
-import time
 import boto3
 import csv
 import io
@@ -1950,7 +1949,7 @@ def main():
     application = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
     if application.job_queue is None:
-        logging.warning("JobQueue não está disponível. As verificações automáticas de assinatura serão desativadas.")
+    logging.warning("JobQueue não está disponível. As verificações automáticas de assinatura serão desativadas.")
     else:
         try:
             # Use datetime_time em vez de time
