@@ -5,7 +5,8 @@ import tempfile
 import random
 import re
 import json
-from datetime import time as datetime_time
+from datetime import datetime, timedelta, time as time_obj
+import time as time_module
 from pydub import AudioSegment
 from gtts import gTTS
 from telegram import Update, Voice, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup
@@ -1950,8 +1951,8 @@ def main():
         logging.warning("JobQueue não está disponível. As verificações automáticas de assinatura serão desativadas.")
     else:
         try:
-            # Use datetime_time em vez de time
-            daily_time = datetime_time(hour=10, minute=0, second=0)
+            # Use time_obj em vez de time
+            daily_time = time_obj(hour=10, minute=0, second=0)  # Usando o time da datetime
             application.job_queue.run_daily(
                 verificar_assinaturas_expiradas,
                 time=daily_time
