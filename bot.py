@@ -495,50 +495,60 @@ async def recomendar_material(user_id):
 CACHE_DIR = os.path.join(tempfile.gettempdir(), "audio_cache")
 os.makedirs(CACHE_DIR, exist_ok=True)
 
-def gerar_audio_fala(texto, slow=False, max_retries=3):
-    """
-    Gera áudio a partir de texto com sistema de cache e retry.
-    
-    Args:
-        texto: Texto a ser convertido em áudio
-        slow: Se True, gera áudio mais lento
-        max_retries: Número máximo de tentativas em caso de erro
-    
-    Returns:
-        Caminho para o arquivo de áudio
-    """
-    # Criar um hash do texto para identificar unicamente
-    texto_hash = hashlib.md5(f"{texto}_{slow}".encode()).hexdigest()
-    cache_path = os.path.join(CACHE_DIR, f"{texto_hash}.mp3")
-    
-    # Se já existe no cache, retorna diretamente
-    if os.path.exists(cache_path):
-        logging.info(f"Usando áudio do cache para: {texto[:30]}...")
-        return cache_path
-    
-    # Se não está no cache, tenta gerar com retry
-    for attempt in range(max_retries):
+def gerar_audio_fala(texto, slow=False):
+    try:
+        # Verificar se temos as credenciais AWS
+        aws_key = os.getenv("AWS_ACCESS_KEY_ID")
+        aws_secret = os.getenv("AWS_SECRET_ACCESS_KEY")
+        
+        if aws_key and aws_secret:
+            # Usar Amazon Polly
+            polly_client = boto3.client(
+                'polly',
+                aws_access_key_id=aws_key,
+                aws_secret_access_key=aws_secret,
+                region_name='us-east-1'
+            )
+            
+            response = polly_client.synthesize_speech(
+                Text=texto,
+                OutputFormat='mp3',
+                VoiceId='Joanna'  # voz feminina em inglês americano
+            )
+            
+            caminho = tempfile.mktemp(suffix=".mp3")
+            
+            with open(caminho, 'wb') as file:
+                file.write(response['AudioStream'].read())
+            
+            return caminho
+        else:
+            # Fallback para gTTS se não tiver credenciais AWS
+            return gerar_audio_com_gtts(texto, slow)
+    except Exception as e:
+        logging.error(f"Erro ao gerar áudio com Polly: {e}")
+        # Fallback para gTTS como backup
+        return gerar_audio_com_gtts(texto, slow)
+
+# Mantenha a função original como fallback
+def gerar_audio_com_gtts(texto, slow=False):
+    # Implementar retry com backoff
+    max_tentativas = 3
+    for tentativa in range(1, max_tentativas + 1):
         try:
             tts = gTTS(text=texto, lang="en", slow=slow)
-            tts.save(cache_path)
-            logging.info(f"Áudio gerado com gTTS e salvo no cache: {texto[:30]}...")
-            return cache_path
+            caminho = tempfile.mktemp(suffix=".mp3")
+            tts.save(caminho)
+            return caminho
         except Exception as e:
-            # Se não é a última tentativa, esperar e tentar novamente
-            if attempt < max_retries - 1:
-                wait_time = 2 ** attempt  # Backoff exponencial: 1s, 2s, 4s...
-                logging.warning(f"Erro ao gerar áudio (tentativa {attempt+1}/{max_retries}): {e}")
-                logging.info(f"Aguardando {wait_time}s antes da próxima tentativa...")
-                time.sleep(wait_time)
+            logging.warning(f"Erro ao gerar áudio (tentativa {tentativa}/{max_tentativas}): {e}")
+            if tentativa < max_tentativas:
+                tempo_espera = tentativa * 2  # backoff exponencial
+                logging.info(f"Aguardando {tempo_espera}s antes da próxima tentativa...")
+                time.sleep(tempo_espera)
             else:
-                # Na última tentativa, registrar erro e retornar caminho temporário vazio
-                logging.error(f"Falha ao gerar áudio após {max_retries} tentativas: {e}")
-                fallback_path = tempfile.mktemp(suffix=".mp3")
-                # Criar arquivo vazio ou usar um arquivo pré-definido de silêncio
-                with open(fallback_path, 'wb') as f:
-                    f.write(b'\x00' * 100)  # Arquivo mínimo
-                return fallback_path
-
+                logging.error(f"Falha ao gerar áudio após {max_tentativas} tentativas: {e}")
+                raise
 
 # Função para conversar com base no tema e nível
 async def conversar_sobre_tema(texto, tema, nivel):
