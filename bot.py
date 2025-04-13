@@ -1950,10 +1950,10 @@ def main():
             application.job_queue.run_daily(
                 verificar_assinaturas_expiradas,
                 time=daily_time
-        )
-        logging.info("Verificação diária de assinaturas agendada com sucesso.")
-    except Exception as e:
-        logging.error(f"Erro ao configurar job_queue: {e}")
+            )
+            logging.info("Verificação diária de assinaturas agendada com sucesso.")
+        except Exception as e:
+            logging.error(f"Erro ao configurar job_queue: {e}")
     
     # Adicionar handlers de conversa - MODIFIQUE ESTA PARTE
     conv_handler = ConversationHandler(
