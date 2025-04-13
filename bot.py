@@ -494,48 +494,72 @@ async def recomendar_material(user_id):
 CACHE_DIR = os.path.join(tempfile.gettempdir(), "audio_cache")
 os.makedirs(CACHE_DIR, exist_ok=True)
 
+import hashlib
+import os
+import tempfile
+import logging
+import boto3
+
 def gerar_audio_fala(texto, slow=True):
     try:
-        # Verificar se temos as credenciais AWS
         aws_key = os.getenv("AWS_ACCESS_KEY_ID")
         aws_secret = os.getenv("AWS_SECRET_ACCESS_KEY")
-        
-        if aws_key and aws_secret:
-            # Usar Amazon Polly
-            polly_client = boto3.client(
-                'polly',
-                aws_access_key_id=aws_key,
-                aws_secret_access_key=aws_secret,
-                region_name='us-east-1'
-            )
-            
-            ssml_texto = f"<speak><prosody rate='slow' pitch='-2%' volume='medium'>{texto}</prosody></speak>"
 
-            response = polly_client.synthesize_speech(
-                Text=ssml_texto,
-                TextType='ssml',
-                OutputFormat='mp3',
-                VoiceId='Salli',
-                Engine='standard'
-            )
-
-            caminho = tempfile.mktemp(suffix=".mp3")
-            
-            with open(caminho, 'wb') as file:
-                file.write(response['AudioStream'].read())
-            
-            return caminho
-        else:
-            # Fallback para gTTS se não tiver credenciais AWS
+        if not aws_key or not aws_secret:
             return gerar_audio_com_gtts(texto, slow)
+
+        # Caminho absoluto da pasta de cache
+        cache_dir = os.path.join(os.getcwd(), "audios_cache")
+        os.makedirs(cache_dir, exist_ok=True)
+
+        # Criar hash único do texto
+        hash_nome = hashlib.md5(texto.encode('utf-8')).hexdigest()
+        caminho_cache = os.path.join(cache_dir, f"{hash_nome}.mp3")
+
+        # Se já existe no cache, retorna ele
+        if os.path.exists(caminho_cache):
+            return caminho_cache
+
+        # Cliente Polly
+        polly_client = boto3.client(
+            'polly',
+            aws_access_key_id=aws_key,
+            aws_secret_access_key=aws_secret,
+            region_name='us-east-1'
+        )
+
+        # Usar SSML com voicing natural (mas com engine STANDARD)
+        ssml_texto = f"""
+        <speak>
+            <prosody rate="slow" pitch="-2%" volume="medium">
+                {texto}
+            </prosody>
+        </speak>
+        """
+
+        response = polly_client.synthesize_speech(
+            Text=ssml_texto,
+            TextType='ssml',
+            OutputFormat='mp3',
+            VoiceId='Salli',
+            Engine='standard'
+        )
+
+        # Salvar arquivo no cache
+        with open(caminho_cache, 'wb') as f:
+            f.write(response['AudioStream'].read())
+
+        return caminho_cache
+
     except Exception as e:
         logging.error(f"Erro ao gerar áudio com Polly: {e}")
-        # Fallback para gTTS como backup
         return gerar_audio_com_gtts(texto, slow)
 
-# Mantenha a função original como fallback
+# Fallback com gTTS
 def gerar_audio_com_gtts(texto, slow=False):
-    # Implementar retry com backoff
+    from gtts import gTTS
+    import time
+
     max_tentativas = 3
     for tentativa in range(1, max_tentativas + 1):
         try:
@@ -544,13 +568,10 @@ def gerar_audio_com_gtts(texto, slow=False):
             tts.save(caminho)
             return caminho
         except Exception as e:
-            logging.warning(f"Erro ao gerar áudio (tentativa {tentativa}/{max_tentativas}): {e}")
+            logging.warning(f"Erro gTTS (tentativa {tentativa}): {e}")
             if tentativa < max_tentativas:
-                tempo_espera = tentativa * 2  # backoff exponencial
-                logging.info(f"Aguardando {tempo_espera}s antes da próxima tentativa...")
-                time.sleep(tempo_espera)
+                time.sleep(tentativa * 2)
             else:
-                logging.error(f"Falha ao gerar áudio após {max_tentativas} tentativas: {e}")
                 raise
 
 # Função para conversar com base no tema e nível
