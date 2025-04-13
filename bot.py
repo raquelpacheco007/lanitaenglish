@@ -495,7 +495,7 @@ async def recomendar_material(user_id):
 CACHE_DIR = os.path.join(tempfile.gettempdir(), "audio_cache")
 os.makedirs(CACHE_DIR, exist_ok=True)
 
-def gerar_audio_fala(texto, slow=False):
+def gerar_audio_fala(texto, slow=True):
     try:
         # Verificar se temos as credenciais AWS
         aws_key = os.getenv("AWS_ACCESS_KEY_ID")
@@ -510,12 +510,15 @@ def gerar_audio_fala(texto, slow=False):
                 region_name='us-east-1'
             )
             
+            ssml_texto = f"<speak><prosody rate='{'x-slow' if slow else 'medium'}'>{texto}</prosody></speak>"
+
             response = polly_client.synthesize_speech(
-                Text=texto,
+                Text=ssml_texto,
+                TextType='ssml',
                 OutputFormat='mp3',
-                VoiceId='Joanna'  # voz feminina em inglês americano
+                VoiceId='Joanna'
             )
-            
+
             caminho = tempfile.mktemp(suffix=".mp3")
             
             with open(caminho, 'wb') as file:
