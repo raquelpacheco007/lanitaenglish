@@ -510,7 +510,7 @@ def gerar_audio_fala(texto, slow=True):
                 region_name='us-east-1'
             )
             
-            ssml_texto = f"<speak><prosody rate='medium' pitch='-2%' volume='medium'>{texto}</prosody></speak>"
+            ssml_texto = f"<speak><prosody rate='slow' pitch='-2%' volume='medium'>{texto}</prosody></speak>"
 
             response = polly_client.synthesize_speech(
                 Text=ssml_texto,
@@ -1072,10 +1072,15 @@ async def nome_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def nivel_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    await query.answer()
-    
+    try:
+        await query.answer()  # Garantir que respondemos ao callback
+    except Exception as e:
+        logging.error(f"Erro ao responder callback query: {e}")
+        
     user_id = query.from_user.id
     nivel = query.data.split("_")[1]
+    
+    logging.info(f"Alterando nível para usuário {user_id}: {nivel}")  # Log adicional
     
     # Guardar o nível no banco de dados
     db = SessionLocal()
@@ -1111,11 +1116,21 @@ async def nivel_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    await query.edit_message_text(
-        f"Great, {nome}! I'll adjust my feedback for {nivel} level speakers.{texto_premium}\n\n"
-        "What would you like to do?",
-        reply_markup=reply_markup
-    )
+    try:
+        await query.edit_message_text(
+            f"Great, {nome}! I'll adjust my feedback for {nivel} level speakers.{texto_premium}\n\n"
+            "What would you like to do?",
+            reply_markup=reply_markup
+        )
+    except Exception as e:
+        logging.error(f"Erro ao editar mensagem: {e}")
+        # Tentar enviar uma nova mensagem como fallback
+        await context.bot.send_message(
+            chat_id=query.message.chat_id,
+            text=f"Great, {nome}! I'll adjust my feedback for {nivel} level speakers.{texto_premium}\n\n"
+                 "What would you like to do?",
+            reply_markup=reply_markup
+        )
     
     return MENU
 
@@ -1978,6 +1993,9 @@ def main():
     
     # Handler genérico para outros callback queries
     application.add_handler(CallbackQueryHandler(menu_handler))
+
+    # Adicione este padrão específico ao seu CallbackQueryHandler
+    application.add_handler(CallbackQueryHandler(nivel_handler, pattern="^nivel_"))
     
     # Configurar e iniciar o webhook
     if WEBHOOK_URL:
