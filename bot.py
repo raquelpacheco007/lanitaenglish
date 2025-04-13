@@ -5,7 +5,7 @@ import tempfile
 import random
 import re
 import json
-from datetime import datetime, timedelta, time
+from datetime import datetime, timedelta, time as datetime_time
 from pydub import AudioSegment
 from gtts import gTTS
 from telegram import Update, Voice, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup
@@ -15,7 +15,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import requests
 import hashlib
-import time
 import boto3
 import csv
 import io
@@ -1072,29 +1071,28 @@ async def nome_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def nivel_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    try:
-        await query.answer()  # Garantir que respondemos ao callback
-    except Exception as e:
-        logging.error(f"Erro ao responder callback query: {e}")
-        
+    await query.answer()
+    
     user_id = query.from_user.id
     nivel = query.data.split("_")[1]
     
-    logging.info(f"Alterando nível para usuário {user_id}: {nivel}")  # Log adicional
+    logging.info(f"Alterando nível para usuário {user_id}: {nivel}")
     
     # Guardar o nível no banco de dados
     db = SessionLocal()
     try:
+        # Obter perfil existente
+        perfil = obter_perfil(db, user_id)
+        
         # Atualizar/criar perfil
-        atualizar_perfil(db, user_id, nivel=nivel)
         if perfil:
+            # Atualizar o perfil existente
             perfil.nivel = nivel
             db.commit()
-            logging.info(f"Nível atualizado para {nivel}")
         else:
+            # Criar novo perfil
             criar_perfil(db, user_id, nivel=nivel)
-            logging.info(f"Perfil criado com nível {nivel}")
-
+        
         # Verificar se o usuário tem assinatura premium ativa
         tem_premium = verificar_assinatura_premium(db, user_id)
         
@@ -1104,7 +1102,7 @@ async def nivel_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         # Texto adicional para usuários premium
         texto_premium = ""
-        if tem_premium:
+        if tem_premium and usuario and usuario.expiracao:
             data_expiracao = usuario.expiracao.strftime("%d/%m/%Y")
             texto_premium = f"\n\n🌟 Você tem acesso premium ativo até {data_expiracao}!"
     finally:
@@ -1131,11 +1129,11 @@ async def nivel_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
     except Exception as e:
         logging.error(f"Erro ao editar mensagem: {e}")
-        # Tentar enviar uma nova mensagem como fallback
+        # Se não for possível editar, tente enviar uma nova mensagem
         await context.bot.send_message(
             chat_id=query.message.chat_id,
             text=f"Great, {nome}! I'll adjust my feedback for {nivel} level speakers.{texto_premium}\n\n"
-                 "What would you like to do?",
+                "What would you like to do?",
             reply_markup=reply_markup
         )
     
@@ -1943,41 +1941,34 @@ def main():
     # Criar aplicação
     application = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
     
-    # MODIFICADO: Tratar a possível ausência do JobQueue
     if application.job_queue is None:
         logging.warning("JobQueue não está disponível. As verificações automáticas de assinatura serão desativadas.")
     else:
         try:
-            daily_time = time(hour=10, minute=0, second=0)
+            # Use datetime_time em vez de time
+            daily_time = datetime_time(hour=10, minute=0, second=0)
             application.job_queue.run_daily(
                 verificar_assinaturas_expiradas,
                 time=daily_time
-            )
-            logging.info("Verificação diária de assinaturas agendada com sucesso.")
-        except Exception as e:
-            logging.error(f"Erro ao configurar job_queue: {e}")
+        )
+        logging.info("Verificação diária de assinaturas agendada com sucesso.")
+    except Exception as e:
+        logging.error(f"Erro ao configurar job_queue: {e}")
     
     # Adicionar handlers de conversa - MODIFIQUE ESTA PARTE
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler("start", start)],
         states={
             NOME: [MessageHandler(filters.TEXT & ~filters.COMMAND, nome_handler)],
-            NIVEL: [
-                CallbackQueryHandler(nivel_handler, pattern="^nivel_"),
-                # Outros handlers relevantes aqui
-            ],
-            MENU: [
-                CallbackQueryHandler(nivel_handler, pattern="^nivel_"),  # Adicionado aqui também
-                CallbackQueryHandler(menu_handler)
-            ],
+            NIVEL: [CallbackQueryHandler(nivel_handler, pattern="^nivel_")],
+            MENU: [CallbackQueryHandler(menu_handler)],
             TEMA: [CallbackQueryHandler(tema_handler, pattern="^tema_")]
         },
-        fallbacks=[CommandHandler("start", start)]
+        fallbacks=[CommandHandler("cancel", cancelar)]
     )
-    
-    application.add_handler(conv_handler)
-    
+        
     # Adicionar comando handlers
+    application.add_handler(conv_handler)
     application.add_handler(CommandHandler("help", comando_ajuda))
     application.add_handler(CommandHandler("theme", comando_tema))
     application.add_handler(CommandHandler("question", comando_pergunta))
