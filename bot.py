@@ -63,7 +63,7 @@ def get_db():
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 openai_client = OpenAI(api_key=OPENAI_API_KEY)
-google_api_key = os.getenv('GOOGLE_API_KEY')
+google_api_key = os.getenv('GOOGLE_CREDENTIALS_JSON')
 URL_PLANILHA = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSQqQxElIhtdIiFYWPlz6SSXH6UUcsHqFxLWi_fhmv-h4-SM8Q7KB8M2DCooYTZRZU0pLNcfNAyzsQN/pub?gid=0&single=true&output=csv"
 
 # Webhook do Make que você criou
@@ -500,72 +500,47 @@ os.makedirs(CACHE_DIR, exist_ok=True)
 
 def gerar_audio_fala(texto, slow=True):
     try:
-        # Pasta de cache
-        cache_dir = os.path.join(os.getcwd(), "audios_cache")
-        os.makedirs(cache_dir, exist_ok=True)
+        # Lê o conteúdo da variável de ambiente
+        credenciais_json = os.environ.get("GOOGLE_CREDENTIALS_JSON")
+        if not credenciais_json:
+            raise ValueError("Variável GOOGLE_CREDENTIALS_JSON não encontrada.")
 
-        # Gerar hash do texto
-        hash_nome = hashlib.md5(texto.encode('utf-8')).hexdigest()
-        caminho_cache = os.path.join(cache_dir, f"{hash_nome}.mp3")
+        # Cria um arquivo temporário com as credenciais
+        with tempfile.NamedTemporaryFile(mode='w+', delete=False, suffix=".json") as cred_file:
+            cred_file.write(credenciais_json)
+            cred_file_path = cred_file.name
 
-        # Se já existe, retorna o arquivo cache
-        if os.path.exists(caminho_cache):
-            return caminho_cache
+        # Cria o cliente usando o caminho do JSON
+        client = texttospeech.TextToSpeechClient.from_service_account_file(cred_file_path)
 
-        # Configurar cliente do Google Text-to-Speech usando a chave API
-        # A chave é passada diretamente como variável de ambiente
-        os.environ["GOOGLE_API_KEY"] = os.getenv("GOOGLE_API_KEY")  # Certifique-se de que a chave está configurada no Render
-
-        client = texttospeech.TextToSpeechClient()
-
-        input_text = texttospeech.SynthesisInput(text=texto)
+        synthesis_input = texttospeech.SynthesisInput(text=texto)
 
         voice = texttospeech.VoiceSelectionParams(
             language_code="en-US",
-            name="en-US-Standard-A",  # Feminina, natural e leve
-            ssml_gender=texttospeech.SsmlVoiceGender.FEMALE
+            ssml_gender=texttospeech.SsmlVoiceGender.NEUTRAL
         )
 
         audio_config = texttospeech.AudioConfig(
             audio_encoding=texttospeech.AudioEncoding.MP3,
-            speaking_rate=0.9 if slow else 1.0
+            speaking_rate=0.8 if slow else 1.0
         )
 
-        # Gerar áudio
         response = client.synthesize_speech(
-            input=input_text,
+            input=synthesis_input,
             voice=voice,
             audio_config=audio_config
         )
 
-        # Salvar áudio no cache
-        with open(caminho_cache, "wb") as out:
+        # Salva o arquivo de áudio
+        output_path = f"audio_{hash(texto)}.mp3"
+        with open(output_path, "wb") as out:
             out.write(response.audio_content)
 
-        return caminho_cache
+        return output_path
 
     except Exception as e:
-        logging.error(f"Erro ao gerar áudio com Polly: {e}")
-        return gerar_audio_com_gtts(texto, slow)
-
-# Fallback com gTTS
-def gerar_audio_com_gtts(texto, slow=False):
-    from gtts import gTTS
-    import time
-
-    max_tentativas = 3
-    for tentativa in range(1, max_tentativas + 1):
-        try:
-            tts = gTTS(text=texto, lang="en", slow=slow)
-            caminho = tempfile.mktemp(suffix=".mp3")
-            tts.save(caminho)
-            return caminho
-        except Exception as e:
-            logging.warning(f"Erro gTTS (tentativa {tentativa}): {e}")
-            if tentativa < max_tentativas:
-                time.sleep(tentativa * 2)
-            else:
-                raise
+        print("Erro ao gerar áudio com Google Cloud:", e)
+        raise
 
 # Função para conversar com base no tema e nível
 async def conversar_sobre_tema(texto, tema, nivel):
