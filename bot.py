@@ -25,7 +25,6 @@ from telegram import Update
 from telegram.ext import ContextTypes
 from google.cloud import texttospeech
 
-
 # Importar classes do banco de dados
 from sqlalchemy import create_engine, and_, or_, func, desc
 from sqlalchemy.orm import sessionmaker
