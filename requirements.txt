@@ -10,3 +10,4 @@ requests
 sqlalchemy
 psycopg2-binary
 boto3
+google-cloud-texttospeech
