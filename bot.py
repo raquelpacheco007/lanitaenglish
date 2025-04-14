@@ -71,6 +71,20 @@ MAKE_WEBHOOK_URL = "https://hook.us2.make.com/oc44mwkxo2jx2x08o9shgrxjcn8a72gr"
 
 CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSQqQxElIhtdIiFYWPlz6SSXH6UUcsHqFxLWi_fhmv-h4-SM8Q7KB8M2DCooYTZRZU0pLNcfNAyzsQN/pub?gid=0&single=true&output=csv'
 
+# Pega a string do JSON vinda do Render
+cred_str = os.environ.get("GOOGLE_CREDENTIALS_JSON")
+
+# Garante que a string esteja formatada corretamente como JSON
+cred_dict = json.loads(cred_str)
+
+# Salva isso em um arquivo temporário
+with open("google_credentials.json", "w") as f:
+    json.dump(cred_dict, f)
+
+from google.cloud import texttospeech
+client = texttospeech.TextToSpeechClient.from_service_account_file("google_credentials.json")
+
+
 # Configuração de logs
 logging.basicConfig(level=logging.INFO, 
                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
