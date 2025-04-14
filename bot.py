@@ -531,7 +531,7 @@ def gerar_audio_fala(texto, slow=True):
         voice = texttospeech.VoiceSelectionParams(
             language_code="en-US",
             name="en-US-Standard-C",
-            ssml_gender=texttospeech.SsmlVoiceGender.NEUTRAL
+            ssml_gender=texttospeech.SsmlVoiceGender.FEMALE
         )
 
         audio_config = texttospeech.AudioConfig(
