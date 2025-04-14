@@ -23,6 +23,8 @@ import io
 from io import StringIO
 from telegram import Update
 from telegram.ext import ContextTypes
+from google.cloud import texttospeech
+
 
 # Importar classes do banco de dados
 from sqlalchemy import create_engine, and_, or_, func, desc
@@ -62,6 +64,7 @@ def get_db():
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 openai_client = OpenAI(api_key=OPENAI_API_KEY)
+google_api_key = os.getenv('GOOGLE_API_KEY')
 URL_PLANILHA = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSQqQxElIhtdIiFYWPlz6SSXH6UUcsHqFxLWi_fhmv-h4-SM8Q7KB8M2DCooYTZRZU0pLNcfNAyzsQN/pub?gid=0&single=true&output=csv"
 
 # Webhook do Make que você criou
@@ -498,52 +501,47 @@ os.makedirs(CACHE_DIR, exist_ok=True)
 
 def gerar_audio_fala(texto, slow=True):
     try:
-        aws_key = os.getenv("AWS_ACCESS_KEY_ID")
-        aws_secret = os.getenv("AWS_SECRET_ACCESS_KEY")
-
-        if not aws_key or not aws_secret:
-            return gerar_audio_com_gtts(texto, slow)
-
-        # Caminho absoluto da pasta de cache
+        # Pasta de cache
         cache_dir = os.path.join(os.getcwd(), "audios_cache")
         os.makedirs(cache_dir, exist_ok=True)
 
-        # Criar hash único do texto
+        # Gerar hash do texto
         hash_nome = hashlib.md5(texto.encode('utf-8')).hexdigest()
         caminho_cache = os.path.join(cache_dir, f"{hash_nome}.mp3")
 
-        # Se já existe no cache, retorna ele
+        # Se já existe, retorna o arquivo cache
         if os.path.exists(caminho_cache):
             return caminho_cache
 
-        # Cliente Polly
-        polly_client = boto3.client(
-            'polly',
-            aws_access_key_id=aws_key,
-            aws_secret_access_key=aws_secret,
-            region_name='us-east-1'
+        # Configurar cliente do Google Text-to-Speech usando a chave API
+        # A chave é passada diretamente como variável de ambiente
+        os.environ["GOOGLE_API_KEY"] = os.getenv("GOOGLE_API_KEY")  # Certifique-se de que a chave está configurada no Render
+
+        client = texttospeech.TextToSpeechClient()
+
+        input_text = texttospeech.SynthesisInput(text=texto)
+
+        voice = texttospeech.VoiceSelectionParams(
+            language_code="en-US",
+            name="en-US-Standard-A",  # Feminina, natural e leve
+            ssml_gender=texttospeech.SsmlVoiceGender.FEMALE
         )
 
-        # Usar SSML com voicing natural (mas com engine STANDARD)
-        ssml_texto = f"""
-        <speak>
-            <prosody rate="slow" pitch="-2%" volume="medium">
-                {texto}
-            </prosody>
-        </speak>
-        """
-
-        response = polly_client.synthesize_speech(
-            Text=ssml_texto,
-            TextType='ssml',
-            OutputFormat='mp3',
-            VoiceId='Salli',
-            Engine='standard'
+        audio_config = texttospeech.AudioConfig(
+            audio_encoding=texttospeech.AudioEncoding.MP3,
+            speaking_rate=0.9 if slow else 1.0
         )
 
-        # Salvar arquivo no cache
-        with open(caminho_cache, 'wb') as f:
-            f.write(response['AudioStream'].read())
+        # Gerar áudio
+        response = client.synthesize_speech(
+            input=input_text,
+            voice=voice,
+            audio_config=audio_config
+        )
+
+        # Salvar áudio no cache
+        with open(caminho_cache, "wb") as out:
+            out.write(response.audio_content)
 
         return caminho_cache
 
