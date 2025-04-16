@@ -1,5 +1,6 @@
 from flask import Flask, request
 import logging
+import os
 
 app = Flask(__name__)
 
@@ -17,4 +18,5 @@ def index():
     return 'Lanita English está rodando! 🚀'
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=10000)
+    port = int(os.environ.get('PORT', 5000))  # Usa a porta definida pelo ambiente ou 5000 por padrão
+    app.run(host='0.0.0.0', port=port)
