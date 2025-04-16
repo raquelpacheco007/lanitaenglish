@@ -2002,13 +2002,11 @@ def main():
         # Modo webhook para Render
         logging.info(f"Iniciando bot com webhook: {WEBHOOK_URL}")
         
-        # Configurar webhook e iniciar o servidor
-        application.run_webhook(
-            listen="0.0.0.0",
-            port=PORT,
-            url_path="webhook",
-            webhook_url=WEBHOOK_URL
-        )
+        import asyncio
+        asyncio.run(application.initialize())
+        asyncio.run(application.start())
+        asyncio.run(application.bot.set_webhook(WEBHOOK_URL))
+        
     else:
         # Fallback para polling (para desenvolvimento local)
         logging.info("WEBHOOK_URL não configurada. Usando polling (modo de desenvolvimento)")
