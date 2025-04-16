@@ -2002,16 +2002,13 @@ def main():
         # Modo webhook para Render
         logging.info(f"Iniciando bot com webhook: {WEBHOOK_URL}")
         
-        import asyncio
-
-        async def main():
-            await application.initialize()
-            await application.start()
-            await application.bot.set_webhook(WEBHOOK_URL)
-            logging.info("Bot iniciado com webhook.")
-
-        asyncio.run(main())
-        
+        # Configurar webhook e iniciar o servidor
+        application.run_webhook(
+            listen="0.0.0.0",
+            port=PORT,
+            url_path="webhook",
+            webhook_url=WEBHOOK_URL
+        )
     else:
         # Fallback para polling (para desenvolvimento local)
         logging.info("WEBHOOK_URL não configurada. Usando polling (modo de desenvolvimento)")
@@ -2021,7 +2018,7 @@ def main():
             url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/deleteWebhook?drop_pending_updates=true"
             requests.get(url)
         except:
-            logging.warning("Não foi possível limpar webhook via HTTP: {e}")
+            logging.warning("Não foi possível limpar webhook via HTTP")
         
         # Iniciar bot com polling
         application.run_polling(drop_pending_updates=True)
