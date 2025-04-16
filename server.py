@@ -1,22 +1,36 @@
-from flask import Flask, request
-import logging
 import os
+from flask import Flask, redirect
+import subprocess
+import sys
+import socket
 
+# Cria a aplicação Flask
 app = Flask(__name__)
 
-# Ative logs para debug (opcional)
-logging.basicConfig(level=logging.INFO)
-
-@app.route('/webhook', methods=['POST'])
-def webhook():
-    # Aqui você vai processar os dados recebidos do Telegram
-    logging.info("Webhook chamado!")
-    return 'Webhook recebido com sucesso', 200
-
+# Rota principal - redireciona para o bot
 @app.route('/')
 def index():
-    return 'Lanita English está rodando! 🚀'
+    return "Bot está rodando! Esta é apenas a página de status."
+
+# Verifica se a porta está em uso
+def is_port_in_use(port):
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        return s.connect_ex(('localhost', port)) == 0
+
+# Função para iniciar o bot em uma thread separada
+def start_bot():
+    # Aqui você pode importar e iniciar o bot diretamente
+    # Ou iniciar como um subprocesso
+    subprocess.Popen([sys.executable, 'bot.py'])
 
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))  # Usa a porta definida pelo ambiente ou 5000 por padrão
-    app.run(host='0.0.0.0', port=port)
+    # Prioriza a porta definida pelo Render, ou usa uma porta alternativa
+    port = int(os.environ.get('PORT', 10000))  # Render usa variável de ambiente PORT
+    
+    # Verifica se o bot.py já está rodando em alguma porta
+    # Se estiver, não tenta iniciar o bot novamente
+    if not is_port_in_use(port):
+        start_bot()
+    
+    # Inicia o server Flask em uma porta diferente que não conflite
+    app.run(host='0.0.0.0', port=port, debug=False)
