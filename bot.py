@@ -2027,19 +2027,5 @@ def main():
 
         app = Flask(__name__)
 
-        # Endpoint simples para health check
-        @app.route('/health', methods=['GET'])
-        def health_check():
-            return "OK", 200
-
-        # Inicie o servidor Flask em uma thread separada
-        def run_flask():
-            app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 8080)))
-
-        # Na função main(), adicione:
-        flask_thread = threading.Thread(target=run_flask)
-        flask_thread.daemon = True
-        flask_thread.start()
-
 if __name__ == "__main__":
     main()
