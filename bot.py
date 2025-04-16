@@ -7,6 +7,7 @@ import re
 import json
 from datetime import datetime, timedelta
 from datetime import time as datetime_time
+from flask import Flask, request, Response
 import time
 from pydub import AudioSegment
 from gtts import gTTS
@@ -17,6 +18,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import requests
 import hashlib
+import threading
 import boto3
 import csv
 import io
@@ -2022,6 +2024,22 @@ def main():
         
         # Iniciar bot com polling
         application.run_polling(drop_pending_updates=True)
+
+        app = Flask(__name__)
+
+        # Endpoint simples para health check
+        @app.route('/health', methods=['GET'])
+        def health_check():
+            return "OK", 200
+
+        # Inicie o servidor Flask em uma thread separada
+        def run_flask():
+            app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 8080)))
+
+        # Na função main(), adicione:
+        flask_thread = threading.Thread(target=run_flask)
+        flask_thread.daemon = True
+        flask_thread.start()
 
 if __name__ == "__main__":
     main()
