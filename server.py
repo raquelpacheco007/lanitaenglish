@@ -1,12 +1,20 @@
-from flask import Flask
+from flask import Flask, request
+import logging
 
 app = Flask(__name__)
 
-@app.route("/")
-def home():
-    return "Lanita está ouvindo você com atenção! 🎧🐰"
+# Ative logs para debug (opcional)
+logging.basicConfig(level=logging.INFO)
 
-if __name__ == "__main__":
-    import os
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
+@app.route('/webhook', methods=['POST'])
+def webhook():
+    # Aqui você vai processar os dados recebidos do Telegram
+    logging.info("Webhook chamado!")
+    return 'Webhook recebido com sucesso', 200
+
+@app.route('/')
+def index():
+    return 'Lanita English está rodando! 🚀'
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=10000)
